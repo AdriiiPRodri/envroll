@@ -1,0 +1,95 @@
+# =============================================================================
+# Rust
+# =============================================================================
+
+# Cargo build output
+/target/
+
+# rustfmt backup files
+**/*.rs.bk
+
+# MSVC debug info
+*.pdb
+
+# Local cargo config overrides (developer-specific)
+.cargo/config.toml
+
+# Note: Cargo.lock IS committed because envroll is a binary crate.
+# Do not add it here.
+
+
+# =============================================================================
+# Plaintext env files (we are the dogfood — never commit a real .env)
+# =============================================================================
+
+.env
+.env.*
+!.env.example
+
+
+# =============================================================================
+# Claude Code
+# =============================================================================
+# Project-shared assets in .claude/ (commands/, skills/, agents/, settings.json)
+# stay tracked so the team gets the same tooling. Only the per-user local
+# settings file is ignored — that's where Claude Code records the user's own
+# permission grants and other machine-local preferences.
+
+.claude/
+.claude
+
+# =============================================================================
+# OpenSpec
+# =============================================================================
+# All committed by design (config.yaml, changes/, specs/). Only ignore the
+# scratch/cache that some OpenSpec workflows may generate locally.
+
+openspec/
+
+# =============================================================================
+# OS / editor noise
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.Trash-*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# JetBrains (IntelliJ / RustRover / CLion)
+.idea/
+*.iml
+
+# VS Code (allow shared config; ignore per-user)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# Vim / Emacs
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# Direnv
+.envrc.local
+
+
+# =============================================================================
+# Logs and crash reports
+# =============================================================================
+
+*.log
+crash.txt
