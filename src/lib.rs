@@ -9,6 +9,7 @@ pub mod cli;
 pub mod crypto;
 pub mod errors;
 pub mod lock;
+pub mod manifest;
 pub mod output;
 pub mod parser;
 pub mod paths;
