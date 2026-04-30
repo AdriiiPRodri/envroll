@@ -6,7 +6,7 @@ A single statically-linked Rust binary that versions, switches, and encrypts env
 <p align="center">
   <a href="https://crates.io/crates/envroll"><img src="https://img.shields.io/crates/v/envroll.svg" alt="crates.io"></a>
   <a href="https://github.com/your-org/envroll/actions"><img src="https://img.shields.io/github/actions/workflow/status/your-org/envroll/ci.yml?branch=main" alt="CI"></a>
-  <a href="https://github.com/your-org/envroll/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg" alt="License"></a>
+  <a href="https://github.com/your-org/envroll/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/rust-1.78%2B-orange.svg" alt="Rust 1.78+">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platforms">
 </p>
@@ -314,12 +314,9 @@ Run the full perf soak with `cargo test --features perf`.
 
 ## License
 
-Dual-licensed under either of:
+MIT — see [LICENSE](LICENSE).
 
-- MIT License ([LICENSE-MIT](LICENSE-MIT))
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-
-at your option.
+Copyright © 2026 Adrián Peña.
 
 ---
 
