@@ -6,11 +6,13 @@
 //! `main` calls, and the modules below are re-exported for tests.
 
 pub mod cli;
+pub mod crypto;
 pub mod errors;
 pub mod lock;
 pub mod output;
 pub mod paths;
 pub mod prompt;
+pub mod vault;
 
 use clap::Parser;
 

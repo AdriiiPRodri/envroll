@@ -1,0 +1,474 @@
+//! Vault filesystem abstraction.
+//!
+//! - [`Vault`]: the resolved vault root + the operations that load / initialize
+//!   it on disk.
+//! - [`Mode`] + [`infer_mode`]: runtime classification of `./.env` (design.md D9).
+//!   No persisted `mode` field; we always re-derive at command time.
+//! - [`fs`]: low-level filesystem helpers (atomic write, perms, orphan sweep).
+//!
+//! Vault layout is documented in design.md D2. This module owns creation of
+//! everything *except* the libgit2 repo (handled separately in
+//! `src/vault/git.rs` once the git layer lands) and the per-project subdirs
+//! (handled by the project lifecycle commands).
+
+pub mod fs;
+
+use age::secrecy::SecretString;
+use std::path::{Component, Path, PathBuf};
+
+use crate::crypto;
+use crate::errors::EnvrollError;
+use crate::paths::{project_checkout_dir, vault_canary, vault_git_dir, vault_version_file};
+
+/// Schema version this binary writes and is willing to read. A vault with a
+/// `.envroll-version` value greater than this MUST be refused per the
+/// project-lifecycle spec ("Binary encounters a future-version vault").
+pub const VAULT_SCHEMA_VERSION: u32 = 1;
+
+/// Vault root mode (design.md D8).
+const VAULT_ROOT_MODE: u32 = 0o700;
+
+/// Mode for plaintext metadata files (`.envroll-version`, `.gitignore`,
+/// `manifest.toml`). No secrets, so 0644 is fine.
+const META_FILE_MODE: u32 = 0o644;
+
+/// Lines written into `<vault>/.gitignore` on first init (design.md D2).
+/// Every commit synced to a remote MUST have these excluded so plaintext
+/// `.checkout/` never leaves the local machine.
+const GITIGNORE_BODY: &str = concat!(
+    "# Managed by envroll — do not edit\n",
+    "**/.checkout/\n",
+    ".vault.lock\n",
+);
+
+/// Handle to an initialized vault. Construct via [`Vault::open`] (read-only)
+/// or [`Vault::ensure_init`] (creates the on-disk layout if missing).
+#[derive(Debug, Clone)]
+pub struct Vault {
+    root: PathBuf,
+}
+
+impl Vault {
+    /// Open an existing vault at `root`.
+    ///
+    /// Verifies that:
+    /// - the root directory exists,
+    /// - `.envroll-version` exists and parses to a number,
+    /// - the recorded version is `<= VAULT_SCHEMA_VERSION` — newer vaults are
+    ///   refused with the spec-mandated upgrade message.
+    ///
+    /// Does NOT verify the canary (that's a separate step performed by every
+    /// command that touches encrypted content; the canary check needs the
+    /// passphrase, which `Vault::open` deliberately does not).
+    pub fn open(root: impl Into<PathBuf>) -> Result<Self, EnvrollError> {
+        let root = root.into();
+        if !root.is_dir() {
+            return Err(EnvrollError::ProjectNotFound);
+        }
+        let version = read_vault_version(&root)?;
+        if version > VAULT_SCHEMA_VERSION {
+            return Err(EnvrollError::Generic(
+                "this vault was created by a newer envroll; please upgrade".to_string(),
+            ));
+        }
+        Ok(Self { root })
+    }
+
+    /// Ensure the vault layout exists at `root`, creating any missing pieces
+    /// idempotently:
+    /// - root dir at 0700,
+    /// - `.envroll-version` (if missing) with the current schema version,
+    /// - `.gitignore` (if missing) with the documented body,
+    /// - `.canary.age` (if missing) encrypted with `passphrase`.
+    ///
+    /// Does NOT touch the libgit2 repo at `<root>/.git` — that is the caller's
+    /// responsibility (the `init` command, once the git layer lands in section 4).
+    /// Does NOT prompt the user; the caller is responsible for sourcing the
+    /// passphrase via [`crate::prompt`].
+    ///
+    /// Returns a [`Vault`] handle pointing at the now-initialized root.
+    pub fn ensure_init(
+        root: impl Into<PathBuf>,
+        passphrase: &SecretString,
+    ) -> Result<Self, EnvrollError> {
+        let root = root.into();
+        fs::ensure_dir(&root, VAULT_ROOT_MODE)?;
+
+        let version_path = vault_version_file(&root);
+        if !version_path.exists() {
+            fs::atomic_write(
+                &version_path,
+                format!("{VAULT_SCHEMA_VERSION}\n").as_bytes(),
+                META_FILE_MODE,
+            )?;
+        } else {
+            // Already present — re-validate that we can read it. This catches
+            // a future-version vault on a re-init attempt.
+            let v = read_vault_version(&root)?;
+            if v > VAULT_SCHEMA_VERSION {
+                return Err(EnvrollError::Generic(
+                    "this vault was created by a newer envroll; please upgrade".to_string(),
+                ));
+            }
+        }
+
+        let gitignore = root.join(".gitignore");
+        if !gitignore.exists() {
+            fs::atomic_write(&gitignore, GITIGNORE_BODY.as_bytes(), META_FILE_MODE)?;
+        }
+
+        let canary = vault_canary(&root);
+        if !canary.exists() {
+            crypto::create_canary(&root, passphrase)?;
+        }
+
+        Ok(Self { root })
+    }
+
+    /// Absolute path to the vault root.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Path to the libgit2 working dir (`<root>/.git`).
+    pub fn git_dir(&self) -> PathBuf {
+        vault_git_dir(&self.root)
+    }
+}
+
+/// Read `<root>/.envroll-version` and parse it as a `u32`. Whitespace
+/// (including a trailing newline) is trimmed. Errors:
+/// - file missing → `Generic("vault not initialized — run `envroll init`")`,
+/// - unparseable → `Generic(...)` with a descriptive message.
+fn read_vault_version(root: &Path) -> Result<u32, EnvrollError> {
+    let path = vault_version_file(root);
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(EnvrollError::Generic(
+                "vault not initialized — run `envroll init` here first".to_string(),
+            ));
+        }
+        Err(e) => return Err(EnvrollError::Io(e)),
+    };
+    raw.trim().parse::<u32>().map_err(|_| {
+        EnvrollError::Generic(format!(
+            "vault version file at {} is unparseable",
+            path.display()
+        ))
+    })
+}
+
+/// Runtime classification of `./.env` (design.md D9).
+///
+/// We never persist this — every command re-derives it from the on-disk type
+/// of `./.env`. That keeps `manifest.toml` machine-independent (the same file
+/// is shared across machines via vault sync) while still letting each machine
+/// behave correctly for its local mode.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Mode {
+    /// `./.env` is absent — no working copy on this machine.
+    None,
+
+    /// `./.env` is a symlink whose target lives inside our project's
+    /// `.checkout/` directory and the target file exists. Reads/writes go
+    /// through the symlink (which resolves to the live checkout).
+    Symlink,
+
+    /// `./.env` is a symlink into our `.checkout/` but the target file is
+    /// gone (e.g., the user `rm -rf`'d the checkout dir). Recoverable: the
+    /// next `envroll use <name>` re-decrypts and the rename overwrites the
+    /// dangling link, no `--force` required (env-switching spec).
+    StaleOurSymlink,
+
+    /// `./.env` is a symlink to anywhere outside our `.checkout/`, broken or
+    /// not. Refuse all working-copy ops without `--force` / `--rescue` per
+    /// design.md D9.
+    ForeignSymlink,
+
+    /// `./.env` is a regular file (not a symlink). This is copy-mode — either
+    /// because `ENVROLL_USE_COPY=1` was set, or because the platform refused
+    /// symlink creation (Windows without Developer Mode).
+    Copy,
+}
+
+/// Inspect `./.env` under `project_root` and classify it (design.md D9).
+///
+/// `project_id` is the registered ID for this project; we use it to compute
+/// the path of `<vault>/projects/<id>/.checkout/` so we can decide whether a
+/// symlink target is "ours". The function does NOT take the vault lock and
+/// does NOT touch any encrypted blob — it is pure FS inspection, suitable
+/// for `status` (shared lock) or any read path.
+pub fn infer_mode(project_root: &Path, vault: &Vault, project_id: &str) -> Mode {
+    let env_path = project_root.join(".env");
+    let symlink_meta = match std::fs::symlink_metadata(&env_path) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Mode::None,
+        // Permission / IO errors here are surprising; treat as foreign so the
+        // command refuses safely rather than silently overwriting.
+        Err(_) => return Mode::ForeignSymlink,
+    };
+
+    if symlink_meta.file_type().is_symlink() {
+        let target = match std::fs::read_link(&env_path) {
+            Ok(t) => t,
+            Err(_) => return Mode::ForeignSymlink,
+        };
+        let absolute_target = if target.is_absolute() {
+            target
+        } else {
+            env_path
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(target)
+        };
+        let normalized_target = lexically_normalize(&absolute_target);
+        let checkout_root = lexically_normalize(&project_checkout_dir(vault.root(), project_id));
+        if normalized_target.starts_with(&checkout_root) {
+            // Check if the resolved target file actually exists.
+            if std::fs::metadata(&env_path).is_ok() {
+                Mode::Symlink
+            } else {
+                Mode::StaleOurSymlink
+            }
+        } else {
+            Mode::ForeignSymlink
+        }
+    } else if symlink_meta.file_type().is_file() {
+        Mode::Copy
+    } else {
+        // Directory or other unexpected type at `./.env`. Treat as foreign so
+        // we refuse instead of clobbering.
+        Mode::ForeignSymlink
+    }
+}
+
+/// Lexically normalize a path: collapse `.` and `..` against earlier components
+/// without consulting the filesystem. Required for [`infer_mode`]'s
+/// "is the symlink target inside our .checkout?" check, which must work even
+/// when the target is broken (FS canonicalize would fail there).
+///
+/// This is a deliberately small subset of what crates like `path-clean` do:
+/// we never need to handle Windows verbatim prefixes here because every input
+/// originates from either an absolute path we built or a `read_link` result
+/// joined onto an absolute parent.
+fn lexically_normalize(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in p.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let last = out.components().next_back();
+                match last {
+                    Some(Component::Normal(_)) => {
+                        out.pop();
+                    }
+                    // Parent of root (or a Windows prefix) is itself; absorb
+                    // the `..` silently. This matches POSIX `cd /; cd ..`.
+                    Some(Component::RootDir) | Some(Component::Prefix(_)) => {}
+                    // Either `out` is empty (relative path starting with `..`)
+                    // or it already ends in `..` — keep stacking.
+                    _ => out.push(".."),
+                }
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use age::secrecy::SecretString;
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn pass(s: &str) -> SecretString {
+        SecretString::from(s.to_string())
+    }
+
+    // ---------- ensure_init / open ----------
+
+    #[test]
+    fn ensure_init_creates_full_layout() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().join("envroll");
+        let v = Vault::ensure_init(&root, &pass("p")).unwrap();
+        assert_eq!(v.root(), root);
+        assert!(root.is_dir());
+        assert!(vault_version_file(&root).exists());
+        assert!(root.join(".gitignore").exists());
+        assert!(vault_canary(&root).exists());
+
+        let version = fs::read_to_string(vault_version_file(&root)).unwrap();
+        assert_eq!(version.trim(), "1");
+
+        let gi = fs::read_to_string(root.join(".gitignore")).unwrap();
+        assert!(gi.contains("**/.checkout/"));
+        assert!(gi.contains(".vault.lock"));
+    }
+
+    #[test]
+    fn ensure_init_is_idempotent() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().join("envroll");
+        Vault::ensure_init(&root, &pass("p")).unwrap();
+        let canary_before = fs::read(vault_canary(&root)).unwrap();
+        // Second call with a DIFFERENT passphrase must not rewrite the canary
+        // (that would silently rotate the vault key).
+        Vault::ensure_init(&root, &pass("different")).unwrap();
+        let canary_after = fs::read(vault_canary(&root)).unwrap();
+        assert_eq!(canary_before, canary_after);
+    }
+
+    #[test]
+    fn open_succeeds_on_an_initialized_vault() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().join("envroll");
+        Vault::ensure_init(&root, &pass("p")).unwrap();
+        let v = Vault::open(&root).unwrap();
+        assert_eq!(v.root(), root);
+    }
+
+    #[test]
+    fn open_fails_on_uninitialized_root() {
+        let dir = TempDir::new().unwrap();
+        let err = Vault::open(dir.path()).unwrap_err();
+        // Either Generic("vault not initialized…") if the dir exists but no
+        // version file, or ProjectNotFound if the dir is missing entirely.
+        // tempfile creates the dir, so we expect Generic.
+        match err {
+            EnvrollError::Generic(msg) => assert!(msg.contains("vault not initialized")),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn open_fails_on_future_version() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().join("envroll");
+        Vault::ensure_init(&root, &pass("p")).unwrap();
+        // Simulate a vault created by a v0.2 binary.
+        fs::write(vault_version_file(&root), "2\n").unwrap();
+        let err = Vault::open(&root).unwrap_err();
+        match err {
+            EnvrollError::Generic(msg) => assert!(msg.contains("created by a newer envroll")),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ensure_init_refuses_future_version_when_root_already_exists() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path().join("envroll");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(vault_version_file(&root), "99\n").unwrap();
+        let err = Vault::ensure_init(&root, &pass("p")).unwrap_err();
+        match err {
+            EnvrollError::Generic(msg) => assert!(msg.contains("created by a newer envroll")),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    // ---------- infer_mode ----------
+
+    fn setup_project(root: &Path, project_id: &str) -> Vault {
+        let v = Vault::ensure_init(root, &pass("p")).unwrap();
+        // Manually create the project's .checkout dir (project lifecycle
+        // commands normally do this in 8.1; here we shortcut for the FS
+        // inspection test).
+        let co = project_checkout_dir(v.root(), project_id);
+        fs::create_dir_all(&co).unwrap();
+        v
+    }
+
+    #[test]
+    fn infer_mode_none_when_dotenv_absent() {
+        let proj = TempDir::new().unwrap();
+        let vault_dir = TempDir::new().unwrap();
+        let v = setup_project(vault_dir.path(), "remote-abc");
+        assert_eq!(infer_mode(proj.path(), &v, "remote-abc"), Mode::None);
+    }
+
+    #[test]
+    fn infer_mode_copy_when_dotenv_is_regular_file() {
+        let proj = TempDir::new().unwrap();
+        let vault_dir = TempDir::new().unwrap();
+        let v = setup_project(vault_dir.path(), "remote-abc");
+        fs::write(proj.path().join(".env"), b"FOO=bar\n").unwrap();
+        assert_eq!(infer_mode(proj.path(), &v, "remote-abc"), Mode::Copy);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn infer_mode_symlink_when_pointing_into_our_checkout() {
+        let proj = TempDir::new().unwrap();
+        let vault_dir = TempDir::new().unwrap();
+        let v = setup_project(vault_dir.path(), "remote-abc");
+        let target = project_checkout_dir(v.root(), "remote-abc").join("dev");
+        fs::write(&target, b"FOO=bar\n").unwrap();
+        std::os::unix::fs::symlink(&target, proj.path().join(".env")).unwrap();
+        assert_eq!(infer_mode(proj.path(), &v, "remote-abc"), Mode::Symlink);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn infer_mode_stale_when_symlink_into_checkout_target_missing() {
+        let proj = TempDir::new().unwrap();
+        let vault_dir = TempDir::new().unwrap();
+        let v = setup_project(vault_dir.path(), "remote-abc");
+        let target = project_checkout_dir(v.root(), "remote-abc").join("dev");
+        // do NOT write target — the symlink will be dangling
+        std::os::unix::fs::symlink(&target, proj.path().join(".env")).unwrap();
+        assert_eq!(
+            infer_mode(proj.path(), &v, "remote-abc"),
+            Mode::StaleOurSymlink
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn infer_mode_foreign_when_symlink_target_outside_checkout() {
+        let proj = TempDir::new().unwrap();
+        let other = TempDir::new().unwrap();
+        let vault_dir = TempDir::new().unwrap();
+        let v = setup_project(vault_dir.path(), "remote-abc");
+        let target = other.path().join("foreign.env");
+        fs::write(&target, b"FOO=bar\n").unwrap();
+        std::os::unix::fs::symlink(&target, proj.path().join(".env")).unwrap();
+        assert_eq!(
+            infer_mode(proj.path(), &v, "remote-abc"),
+            Mode::ForeignSymlink
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn infer_mode_foreign_when_broken_symlink_outside_checkout() {
+        let proj = TempDir::new().unwrap();
+        let vault_dir = TempDir::new().unwrap();
+        let v = setup_project(vault_dir.path(), "remote-abc");
+        std::os::unix::fs::symlink("/no/such/path/foreign.env", proj.path().join(".env")).unwrap();
+        assert_eq!(
+            infer_mode(proj.path(), &v, "remote-abc"),
+            Mode::ForeignSymlink
+        );
+    }
+
+    #[test]
+    fn lexical_normalize_collapses_parent_dirs() {
+        assert_eq!(
+            lexically_normalize(Path::new("/a/b/../c/./d")),
+            PathBuf::from("/a/c/d")
+        );
+    }
+
+    #[test]
+    fn lexical_normalize_keeps_root() {
+        assert_eq!(
+            lexically_normalize(Path::new("/../../a")),
+            PathBuf::from("/a")
+        );
+    }
+}
