@@ -29,7 +29,11 @@ pub fn run() -> Result<u8, anyhow::Error> {
         Ok(()) => Ok(0),
         Err(e) => {
             let code = e.exit_code();
-            eprintln!("envroll: {}: {}", e.category(), e);
+            // The Display message is the user-visible spec text; the
+            // `category()` tag is reserved for structured (JSON) output and
+            // is deliberately omitted here so messages stay byte-identical
+            // to the spec scenarios.
+            eprintln!("envroll: {e}");
             Ok(code as u8)
         }
     }

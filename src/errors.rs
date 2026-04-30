@@ -11,33 +11,37 @@ use std::io;
 use std::path::PathBuf;
 use thiserror::Error;
 
+/// Error variants are deliberately written as transparent (`"{0}"`) wrappers
+/// over a String so each call site can hand the exact spec-mandated text.
+/// The variant identity carries the exit code; the message is just bytes for
+/// the human reader. Variants without an arg fix their canonical message.
 #[derive(Debug, Error)]
 pub enum EnvrollError {
     #[error("{0}")]
     Generic(String),
 
-    #[error("wrong passphrase (canary failed to decrypt)")]
+    #[error("wrong passphrase")]
     WrongPassphrase,
 
-    #[error("file is corrupt or has been tampered with: {0}")]
+    #[error("{0}")]
     FileCorrupt(String),
 
-    #[error("could not parse .env file: {0}")]
+    #[error("{0}")]
     ParseError(String),
 
-    #[error("env not found: {0}")]
+    #[error("{0}")]
     EnvNotFound(String),
 
-    #[error("ref not found: {0}")]
+    #[error("{0}")]
     RefNotFound(String),
 
-    #[error("not an envroll-registered project (run `envroll init` here)")]
+    #[error("not an envroll project (run `envroll init` here)")]
     ProjectNotFound,
 
-    #[error("env name already exists: {0} (pass --force to overwrite)")]
+    #[error("{0}")]
     NameCollision(String),
 
-    #[error("./.env exists and is not managed by envroll: {0}")]
+    #[error("{0}")]
     UnmanagedEnvPresent(String),
 
     #[error("no remote configured (use `envroll remote set <url>`)")]
@@ -46,13 +50,13 @@ pub enum EnvrollError {
     #[error("sync conflict: local and remote vault histories have diverged")]
     SyncConflict,
 
-    #[error("remote transport error: {0}")]
+    #[error("{0}")]
     RemoteTransportError(String),
 
     #[error("cannot read passphrase: no usable source available")]
     NoPassphraseSource,
 
-    #[error("vault lock held by another envroll process")]
+    #[error("vault is locked by another envroll process")]
     VaultLockHeld,
 
     #[error("permission denied on vault path: {0}")]

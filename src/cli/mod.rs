@@ -17,6 +17,7 @@ use clap::{Parser, Subcommand};
 use crate::errors::EnvrollError;
 use crate::output::OutputFormat;
 
+pub mod common;
 pub mod copy;
 pub mod current;
 pub mod diff;
