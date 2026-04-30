@@ -10,6 +10,7 @@ pub mod crypto;
 pub mod errors;
 pub mod lock;
 pub mod output;
+pub mod parser;
 pub mod paths;
 pub mod prompt;
 pub mod vault;

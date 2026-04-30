@@ -12,6 +12,7 @@
 //! (handled by the project lifecycle commands).
 
 pub mod fs;
+pub mod git;
 
 use age::secrecy::SecretString;
 use std::path::{Component, Path, PathBuf};
