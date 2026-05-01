@@ -5,6 +5,9 @@
 # Cargo build output
 /target/
 
+# Local release-staging directory (artifacts uploaded to GitHub releases)
+/dist/
+
 # rustfmt backup files
 **/*.rs.bk
 
