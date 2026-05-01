@@ -74,6 +74,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         &prep.repo,
         prep.project_id(),
         &prep.project_root,
+        &prep.manifest.target_filename,
     );
 
     let (a_arg, b_arg) = match (args.a, args.b) {
@@ -240,12 +241,7 @@ fn print_human_table(
         builder.push_record(["-", key, &display(value, show_values), "—"]);
     }
     for KeyChange { key, a, b } in changed {
-        builder.push_record([
-            "~",
-            key,
-            &display(a, show_values),
-            &display(b, show_values),
-        ]);
+        builder.push_record(["~", key, &display(a, show_values), &display(b, show_values)]);
     }
     let mut table = builder.build();
     table.with(Style::rounded());

@@ -36,6 +36,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
             &prep.repo,
             prep.project_id(),
             &prep.project_root,
+            &prep.manifest.target_filename,
         );
 
         let name = match args.name {
@@ -57,7 +58,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         let is_active_copy_mode = prep.manifest.active == name && matches!(prep.mode, Mode::Copy);
 
         let target: PathBuf = if is_active_copy_mode {
-            prep.project_root.join(".env")
+            prep.dotenv_path()
         } else {
             let plaintext =
                 crypto::decrypt(&std::fs::read(&blob).map_err(EnvrollError::Io)?, &pass)?;

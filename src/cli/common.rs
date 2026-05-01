@@ -79,6 +79,12 @@ impl PreparedProject {
         project_checkout_dir(self.vault.root(), self.project_id())
     }
 
+    /// Absolute path to the working-copy file inside the project root.
+    /// Honors `manifest.target_filename` (default `.env`).
+    pub fn dotenv_path(&self) -> PathBuf {
+        self.project_root.join(&self.manifest.target_filename)
+    }
+
     /// Persist `self.manifest` to disk (atomic write) and commit. Returns
     /// the OID of the commit. Use after every mutation that updates manifest
     /// fields.
@@ -98,7 +104,7 @@ pub fn open_project(ctx: &Context, lock_mode: LockMode) -> Result<PreparedProjec
     let manifest = find_project_for_cwd(&vault, &cwd)?;
     let repo = VaultRepo::open(vault.root())?;
     let project_id = manifest.id.clone();
-    let mode = infer_mode(&cwd, &vault, &project_id);
+    let mode = infer_mode(&cwd, &vault, &project_id, &manifest.target_filename);
 
     // Acquire lock BEFORE any sweep so concurrent envroll commands serialize
     // correctly. The orphan sweep mutates the FS so it must hold the lock.
@@ -147,7 +153,7 @@ pub fn read_pass_and_verify(
 /// symlink (read goes through it). `Mode::Copy` reads `./.env` directly.
 /// Other modes return errors per the env-management spec.
 pub fn read_working_copy(prep: &PreparedProject) -> Result<Vec<u8>, EnvrollError> {
-    let env_path = prep.project_root.join(".env");
+    let env_path = prep.dotenv_path();
     match prep.mode {
         Mode::Symlink => std::fs::read(&env_path).map_err(EnvrollError::Io),
         Mode::Copy => std::fs::read(&env_path).map_err(EnvrollError::Io),
@@ -198,13 +204,14 @@ pub fn write_checkout(
 /// new state — never half-written.
 pub fn activate_dotenv(
     project_root: &Path,
+    target_filename: &str,
     target_abs: &Path,
     force_copy: bool,
 ) -> Result<(), EnvrollError> {
-    let env_path = project_root.join(".env");
+    let env_path = project_root.join(target_filename);
     let pid = std::process::id();
     let rand = crate::paths::rand_hex6();
-    let tmp = project_root.join(format!(".env.envroll-tmp.{pid}.{rand}"));
+    let tmp = project_root.join(format!("{target_filename}.envroll-tmp.{pid}.{rand}"));
     let copy_mode = force_copy || std::env::var_os("ENVROLL_USE_COPY").is_some();
 
     if copy_mode {
@@ -252,10 +259,10 @@ fn make_symlink(_target: &Path, _link: &Path) -> std::io::Result<()> {
     ))
 }
 
-/// Remove `./.env` if present (whether symlink or regular file). No error if
-/// missing — the caller may have already removed it.
-pub fn clear_dotenv(project_root: &Path) -> Result<(), EnvrollError> {
-    let env_path = project_root.join(".env");
+/// Remove the working-copy file (whether symlink or regular file) if present.
+/// No error if missing — the caller may have already removed it.
+pub fn clear_dotenv(project_root: &Path, target_filename: &str) -> Result<(), EnvrollError> {
+    let env_path = project_root.join(target_filename);
     match std::fs::symlink_metadata(&env_path) {
         Ok(_) => std::fs::remove_file(&env_path).map_err(EnvrollError::Io),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -293,10 +300,15 @@ pub fn create_env_from_path(
     write_env_blob(prep, name, plaintext, pass)?;
     write_checkout(prep, name, plaintext)?;
 
-    // Retarget ./.env to the new checkout (absolute path, so the symlink is
-    // valid regardless of cwd).
+    // Retarget the working-copy file to the new checkout (absolute path, so
+    // the symlink is valid regardless of cwd).
     let target = prep.checkout_path(name);
-    activate_dotenv(&prep.project_root, &target, false)?;
+    activate_dotenv(
+        &prep.project_root,
+        &prep.manifest.target_filename,
+        &target,
+        false,
+    )?;
 
     // Update manifest: active=name, clear active_ref.
     prep.manifest.active = name.to_string();

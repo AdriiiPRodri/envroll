@@ -33,6 +33,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         &prep.repo,
         prep.project_id(),
         &prep.project_root,
+        &prep.manifest.target_filename,
     );
 
     let (old, new) = match (args.old, args.new) {
@@ -86,7 +87,12 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         prep.manifest.active = new.clone();
         // Retarget ./.env to the new checkout (absolute path).
         if new_checkout.exists() {
-            activate_dotenv(&prep.project_root, &new_checkout, false)?;
+            activate_dotenv(
+                &prep.project_root,
+                &prep.manifest.target_filename,
+                &new_checkout,
+                false,
+            )?;
         }
     }
     if pinned_to_old {

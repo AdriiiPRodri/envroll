@@ -48,6 +48,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         &prep.repo,
         prep.project_id(),
         &prep.project_root,
+        &prep.manifest.target_filename,
     );
 
     let name = match args.name {

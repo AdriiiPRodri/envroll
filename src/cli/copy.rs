@@ -38,6 +38,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         &prep.repo,
         prep.project_id(),
         &prep.project_root,
+        &prep.manifest.target_filename,
     );
 
     // Validate args one by one so the error tells the user exactly which

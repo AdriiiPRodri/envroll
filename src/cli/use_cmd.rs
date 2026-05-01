@@ -51,6 +51,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         &prep.repo,
         prep.project_id(),
         &prep.project_root,
+        &prep.manifest.target_filename,
     );
 
     let reference = match args.reference {
@@ -84,7 +85,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     // --rescue <name>: save existing ./.env first via the shared helper, then
     // proceed with normal activation of the original ref.
     if let Some(rescue_name) = args.rescue.as_deref() {
-        let env_path = prep.project_root.join(".env");
+        let env_path = prep.dotenv_path();
         let rescue_bytes = std::fs::read(&env_path).map_err(EnvrollError::Io)?;
         // Sanity-parse to surface bad .env early (matches fork/save behavior).
         crate::parser::parse_buf(&rescue_bytes)?;
@@ -136,9 +137,14 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         write_checkout(&prep, &env_name, &plaintext)?;
     }
 
-    // Atomic ./.env retarget. activate_dotenv already honors ENVROLL_USE_COPY
-    // and falls back to copy on Windows symlink failure (10.5).
-    activate_dotenv(&prep.project_root, &checkout_path, false)?;
+    // Atomic working-copy retarget. activate_dotenv already honors
+    // ENVROLL_USE_COPY and falls back to copy on Windows symlink failure.
+    activate_dotenv(
+        &prep.project_root,
+        &prep.manifest.target_filename,
+        &checkout_path,
+        false,
+    )?;
 
     // Update manifest: set active, set/clear active_ref accordingly. Then
     // commit so a synced vault reflects the change.

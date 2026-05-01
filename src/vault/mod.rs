@@ -199,8 +199,13 @@ pub enum Mode {
 /// symlink target is "ours". The function does NOT take the vault lock and
 /// does NOT touch any encrypted blob — it is pure FS inspection, suitable
 /// for `status` (shared lock) or any read path.
-pub fn infer_mode(project_root: &Path, vault: &Vault, project_id: &str) -> Mode {
-    let env_path = project_root.join(".env");
+pub fn infer_mode(
+    project_root: &Path,
+    vault: &Vault,
+    project_id: &str,
+    target_filename: &str,
+) -> Mode {
+    let env_path = project_root.join(target_filename);
     let symlink_meta = match std::fs::symlink_metadata(&env_path) {
         Ok(m) => m,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Mode::None,
@@ -284,6 +289,7 @@ pub fn sweep_historical_checkouts(
     repo: &git::VaultRepo,
     project_id: &str,
     project_root: &Path,
+    target_filename: &str,
 ) -> usize {
     let ttl_days = historical_ttl_days(vault.root());
     if ttl_days == 0 {
@@ -296,7 +302,7 @@ pub fn sweep_historical_checkouts(
         Err(_) => return 0,
     };
     let now = SystemTime::now();
-    let live_target = read_dotenv_target(project_root);
+    let live_target = read_dotenv_target(project_root, target_filename);
 
     // Memoize per-env reachability so we never re-walk history for the same env.
     let scope = repo.project(project_id);
@@ -357,10 +363,12 @@ pub fn sweep_historical_checkouts(
     removed
 }
 
-/// Read `./.env`'s symlink target as an absolute path, if it exists and is a
-/// symlink. Returns `None` for regular files, missing files, or read errors.
-fn read_dotenv_target(project_root: &Path) -> Option<PathBuf> {
-    let env_path = project_root.join(".env");
+/// Read the working-copy file's symlink target as an absolute path, if it
+/// exists and is a symlink. Returns `None` for regular files, missing files,
+/// or read errors. `target_filename` is the per-project working-copy name
+/// (defaults to `.env`, or whatever the project set via `--target`).
+fn read_dotenv_target(project_root: &Path, target_filename: &str) -> Option<PathBuf> {
+    let env_path = project_root.join(target_filename);
     let target = std::fs::read_link(&env_path).ok()?;
     if target.is_absolute() {
         Some(target)
@@ -515,7 +523,10 @@ mod tests {
         let proj = TempDir::new().unwrap();
         let vault_dir = TempDir::new().unwrap();
         let v = setup_project(vault_dir.path(), "remote-abc");
-        assert_eq!(infer_mode(proj.path(), &v, "remote-abc"), Mode::None);
+        assert_eq!(
+            infer_mode(proj.path(), &v, "remote-abc", ".env"),
+            Mode::None
+        );
     }
 
     #[test]
@@ -524,7 +535,10 @@ mod tests {
         let vault_dir = TempDir::new().unwrap();
         let v = setup_project(vault_dir.path(), "remote-abc");
         fs::write(proj.path().join(".env"), b"FOO=bar\n").unwrap();
-        assert_eq!(infer_mode(proj.path(), &v, "remote-abc"), Mode::Copy);
+        assert_eq!(
+            infer_mode(proj.path(), &v, "remote-abc", ".env"),
+            Mode::Copy
+        );
     }
 
     #[cfg(unix)]
@@ -536,7 +550,10 @@ mod tests {
         let target = project_checkout_dir(v.root(), "remote-abc").join("dev");
         fs::write(&target, b"FOO=bar\n").unwrap();
         std::os::unix::fs::symlink(&target, proj.path().join(".env")).unwrap();
-        assert_eq!(infer_mode(proj.path(), &v, "remote-abc"), Mode::Symlink);
+        assert_eq!(
+            infer_mode(proj.path(), &v, "remote-abc", ".env"),
+            Mode::Symlink
+        );
     }
 
     #[cfg(unix)]
@@ -549,7 +566,7 @@ mod tests {
         // do NOT write target — the symlink will be dangling
         std::os::unix::fs::symlink(&target, proj.path().join(".env")).unwrap();
         assert_eq!(
-            infer_mode(proj.path(), &v, "remote-abc"),
+            infer_mode(proj.path(), &v, "remote-abc", ".env"),
             Mode::StaleOurSymlink
         );
     }
@@ -565,7 +582,7 @@ mod tests {
         fs::write(&target, b"FOO=bar\n").unwrap();
         std::os::unix::fs::symlink(&target, proj.path().join(".env")).unwrap();
         assert_eq!(
-            infer_mode(proj.path(), &v, "remote-abc"),
+            infer_mode(proj.path(), &v, "remote-abc", ".env"),
             Mode::ForeignSymlink
         );
     }
@@ -578,7 +595,7 @@ mod tests {
         let v = setup_project(vault_dir.path(), "remote-abc");
         std::os::unix::fs::symlink("/no/such/path/foreign.env", proj.path().join(".env")).unwrap();
         assert_eq!(
-            infer_mode(proj.path(), &v, "remote-abc"),
+            infer_mode(proj.path(), &v, "remote-abc", ".env"),
             Mode::ForeignSymlink
         );
     }

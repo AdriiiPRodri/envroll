@@ -56,6 +56,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         &prep.repo,
         prep.project_id(),
         &prep.project_root,
+        &prep.manifest.target_filename,
     );
 
     if prep.manifest.active.is_empty() {
@@ -95,7 +96,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     // symlink mode the working copy IS the checkout file, so a checkout-vs-
     // working-copy diff would always show clean. The vault blob is the only
     // independent source of truth.
-    let env_path = prep.project_root.join(".env");
+    let env_path = prep.dotenv_path();
     let working = match prep.mode {
         Mode::Symlink | Mode::Copy => Some(std::fs::read(&env_path).map_err(EnvrollError::Io)?),
         _ => None,

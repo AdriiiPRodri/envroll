@@ -20,7 +20,9 @@ use clap::Args as ClapArgs;
 use crate::cli::Context;
 use crate::crypto;
 use crate::errors::{generic, EnvrollError};
-use crate::manifest::{derive_project_id, IdDerivation, Manifest};
+use crate::manifest::{
+    derive_project_id, validate_target_filename, IdDerivation, Manifest, DEFAULT_TARGET_FILENAME,
+};
 use crate::output::OutputFormat;
 use crate::paths::{
     project_checkout_dir, project_dir, project_envs_dir, project_manifest, resolve_vault_root,
@@ -50,10 +52,16 @@ pub struct Args {
     pub id_input: Option<String>,
 
     /// Verify the vault passphrase by decrypting the canary, then exit.
-    /// Does not register a project. Exits 10 on a wrong passphrase
-    ///.
+    /// Does not register a project. Exits 10 on a wrong passphrase.
     #[arg(long)]
     pub verify_passphrase: bool,
+
+    /// Override the working-copy filename inside the project root. Defaults
+    /// to `.env` (Node, Python, Ruby, Go conventions). Set to `.env.local`
+    /// for Next.js / Vite / Astro / Remix / Nuxt projects, or any other
+    /// relative filename your stack reads from.
+    #[arg(long, value_name = "FILENAME")]
+    pub target: Option<String>,
 }
 
 pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
@@ -103,13 +111,28 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         return Ok(());
     }
 
+    // Validate the optional --target filename now so we fail fast before
+    // touching the filesystem layout.
+    let target_filename = match args.target.as_deref() {
+        Some(t) => {
+            validate_target_filename(t)?;
+            t.to_string()
+        }
+        None => DEFAULT_TARGET_FILENAME.to_string(),
+    };
+
     // Build the manifest. For Manual derivation, the user can override
     // id_input via `--id-input` (rare).
     let id_input = match (&derived, args.id_input.as_deref()) {
         (IdDerivation::Manual { .. }, Some(s)) => s.to_string(),
         _ => derived.id_input(),
     };
-    let manifest = Manifest::new(derived.id().to_string(), derived.source(), id_input);
+    let manifest = Manifest::new_with_target(
+        derived.id().to_string(),
+        derived.source(),
+        id_input,
+        target_filename,
+    );
 
     // Lay out the project's vault directory (envs + .checkout) and write the
     // manifest atomically. Note we do NOT write a `.gitkeep` in `envs/` —

@@ -33,6 +33,11 @@ pub enum IdSource {
     Manual,
 }
 
+/// Default for [`Manifest::target_filename`]. The vast majority of projects
+/// use `./.env`; modern JS frameworks (Next.js, Vite, Astro, Remix, Nuxt)
+/// use `.env.local` instead and override at `envroll init --target` time.
+pub const DEFAULT_TARGET_FILENAME: &str = ".env";
+
 /// On-disk schema for `<vault>/projects/<id>/manifest.toml`.
 ///
 /// Field order matters for deterministic output via `toml::to_string`.
@@ -46,6 +51,14 @@ pub struct Manifest {
     /// to keep TOML shape stable.
     #[serde(default)]
     pub id_input: String,
+    /// Filename of the working-copy file inside the project root, relative.
+    /// Defaults to `.env`; users on Next.js/Vite/Astro/Remix/Nuxt typically
+    /// set this to `.env.local` at `envroll init --target` time.
+    ///
+    /// Validated via [`validate_target_filename`] at init: must be relative,
+    /// non-empty, no leading `/`, no `..` components.
+    #[serde(default = "default_target_filename")]
+    pub target_filename: String,
     /// Name of the active env, or empty if no env is active.
     #[serde(default)]
     pub active: String,
@@ -56,15 +69,63 @@ pub struct Manifest {
     pub created_at: DateTime<Utc>,
 }
 
+fn default_target_filename() -> String {
+    DEFAULT_TARGET_FILENAME.to_string()
+}
+
+/// Validate that `name` is a safe relative filename to use as the symlink
+/// target inside the project root. Rejects empty strings, absolute paths,
+/// and paths that try to escape the project root with `..`.
+pub fn validate_target_filename(name: &str) -> Result<(), EnvrollError> {
+    use crate::errors::generic;
+    if name.is_empty() {
+        return Err(generic("--target filename cannot be empty"));
+    }
+    let p = Path::new(name);
+    if p.is_absolute() {
+        return Err(generic(format!(
+            "--target must be a relative path, got absolute: {name}"
+        )));
+    }
+    for component in p.components() {
+        match component {
+            std::path::Component::ParentDir => {
+                return Err(generic(format!(
+                    "--target cannot contain `..` components: {name}"
+                )));
+            }
+            std::path::Component::Prefix(_) | std::path::Component::RootDir => {
+                return Err(generic(format!(
+                    "--target must be a plain relative path: {name}"
+                )));
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 impl Manifest {
     /// Construct a freshly-registered manifest with `created_at = now()` UTC,
-    /// no active env, and no historical pin.
+    /// no active env, no historical pin, and the default target filename.
     pub fn new(id: String, id_source: IdSource, id_input: String) -> Self {
+        Self::new_with_target(id, id_source, id_input, default_target_filename())
+    }
+
+    /// Variant of [`Self::new`] that takes an explicit target filename.
+    /// Caller is responsible for validating via [`validate_target_filename`].
+    pub fn new_with_target(
+        id: String,
+        id_source: IdSource,
+        id_input: String,
+        target_filename: String,
+    ) -> Self {
         Self {
             schema_version: 1,
             id,
             id_source,
             id_input,
+            target_filename,
             active: String::new(),
             active_ref: String::new(),
             created_at: Utc::now(),

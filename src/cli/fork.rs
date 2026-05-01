@@ -43,6 +43,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         &prep.repo,
         prep.project_id(),
         &prep.project_root,
+        &prep.manifest.target_filename,
     );
 
     let name = match args.name {
@@ -73,7 +74,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     // Decide source bytes per the two modes.
     let (plaintext, default_msg) = if !prep.manifest.active.is_empty() {
         // Active env present: fork its working copy.
-        let env_path = prep.project_root.join(".env");
+        let env_path = prep.dotenv_path();
         match prep.mode {
             Mode::Symlink | Mode::Copy => {}
             Mode::ForeignSymlink => {
@@ -119,7 +120,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         // managed symlink). Foreign symlink refuses; absent file refuses.
         match prep.mode {
             Mode::Copy | Mode::Symlink => {
-                let env_path = prep.project_root.join(".env");
+                let env_path = prep.dotenv_path();
                 let bytes = std::fs::read(&env_path).map_err(EnvrollError::Io)?;
                 parser::parse_buf(&bytes)?;
                 let msg = format!("initial save of ./.env as {name}");

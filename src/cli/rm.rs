@@ -25,6 +25,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         &prep.repo,
         prep.project_id(),
         &prep.project_root,
+        &prep.manifest.target_filename,
     );
 
     let name = match args.name {
@@ -63,7 +64,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     if was_active {
         prep.manifest.active = String::new();
         prep.manifest.active_ref = String::new();
-        clear_dotenv(&prep.project_root)?;
+        clear_dotenv(&prep.project_root, &prep.manifest.target_filename)?;
     }
 
     let toml = prep.manifest.to_toml()?;

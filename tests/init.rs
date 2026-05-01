@@ -222,3 +222,104 @@ fn projects_json_on_empty_vault_is_empty_array() {
     let trimmed = stdout.trim();
     assert_eq!(trimmed, "[]", "expected empty JSON array, got {trimmed:?}");
 }
+
+// ----------------------------------------------------------------------
+// --target <filename>: per-project working-copy filename override
+// ----------------------------------------------------------------------
+
+#[test]
+fn init_with_target_dotenv_local_persists_filename_in_manifest() {
+    // Next.js / Vite / Astro convention. The manifest must record it so
+    // every subsequent command (use/save/fork/...) targets `.env.local`
+    // instead of `.env`.
+    let (cwd, xdg) = sandbox();
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["init", "--target", ".env.local"])
+        .assert()
+        .success();
+
+    // Read manifest.toml directly and check the field.
+    let projects = std::fs::read_dir(vault_path(xdg.path()).join("projects")).unwrap();
+    let proj_dir = projects.filter_map(Result::ok).next().unwrap().path();
+    let manifest = std::fs::read_to_string(proj_dir.join("manifest.toml")).unwrap();
+    assert!(
+        manifest.contains("target_filename = \".env.local\""),
+        "manifest missing target_filename: {manifest}"
+    );
+}
+
+#[test]
+fn fork_with_dotenv_local_target_uses_that_filename() {
+    // Full happy-path: init with --target, drop a .env.local, fork it,
+    // confirm ./.env.local now exists as a symlink (not ./.env).
+    let (cwd, xdg) = sandbox();
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["init", "--target", ".env.local"])
+        .assert()
+        .success();
+    std::fs::write(cwd.path().join(".env.local"), b"DEBUG=true\n").unwrap();
+
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["fork", "dev"])
+        .assert()
+        .success();
+
+    // ./.env.local must now be a symlink. ./.env must NOT exist.
+    let local_meta = std::fs::symlink_metadata(cwd.path().join(".env.local")).unwrap();
+    assert!(local_meta.file_type().is_symlink());
+    assert!(
+        !cwd.path().join(".env").exists(),
+        "untouched .env was created"
+    );
+}
+
+#[test]
+fn init_with_invalid_target_refuses() {
+    let (cwd, xdg) = sandbox();
+    // Empty
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["init", "--target", ""])
+        .assert()
+        .failure();
+    // Absolute path
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["init", "--target", "/etc/passwd"])
+        .assert()
+        .failure();
+    // Path traversal
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["init", "--target", "../escape"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn legacy_manifest_without_target_field_defaults_to_dotenv() {
+    // Manifests created before v0.1.2 won't have the `target_filename`
+    // field. Serde must default it to `.env` so old vaults keep working.
+    let (cwd, xdg) = sandbox();
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .arg("init")
+        .assert()
+        .success();
+
+    // Strip target_filename from the manifest to simulate a v0.1.1 vault.
+    let projects = std::fs::read_dir(vault_path(xdg.path()).join("projects")).unwrap();
+    let proj_dir = projects.filter_map(Result::ok).next().unwrap().path();
+    let manifest_path = proj_dir.join("manifest.toml");
+    let body = std::fs::read_to_string(&manifest_path).unwrap();
+    let stripped: String = body
+        .lines()
+        .filter(|l| !l.starts_with("target_filename"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::write(&manifest_path, stripped).unwrap();
+
+    // Subsequent commands must still work and treat the project as `.env`.
+    std::fs::write(cwd.path().join(".env"), b"A=1\n").unwrap();
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["fork", "dev"])
+        .assert()
+        .success();
+    let _ = SecretString::from("p"); // keep age/secrecy import live
+}
