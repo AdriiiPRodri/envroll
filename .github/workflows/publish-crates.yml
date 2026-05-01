@@ -1,0 +1,66 @@
+name: publish-crates
+
+# Auto-publish to crates.io on every `vN.M.P` tag push.
+#
+# Runs in PARALLEL with the cargo-dist release.yml workflow — both are
+# triggered by the same tag push. They're independent: one builds and
+# uploads multi-platform binaries to a GitHub Release; this one publishes
+# the source crate to crates.io. If one fails the other still completes,
+# and recovery is straightforward (re-run the failed workflow).
+#
+# Why hand-rolled instead of cargo-dist's `publish-jobs`: cargo-dist v0.31
+# only ships native `homebrew` and `npm` publish-jobs. crates.io is on the
+# roadmap but not landed at the time of writing. Recheck cargo-dist's
+# changelog when bumping it; if a native job lands, this file becomes
+# redundant and can be deleted in favor of `publish-jobs = ["crates"]` (or
+# whatever the eventual identifier turns out to be) in `dist-workspace.toml`.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  publish:
+    name: cargo publish
+    runs-on: ubuntu-latest
+    # Concurrency guard: if two pushes for the same tag race (rare but
+    # possible during retag), only the latest one wins. crates.io is
+    # eventually consistent and a duplicate publish would error harmlessly,
+    # but skipping the loser keeps the run history clean.
+    concurrency:
+      group: publish-crates-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      # Sanity guard: tag (without leading `v`) must match Cargo.toml's
+      # `version` field. If they disagree, `cargo publish` would silently
+      # publish whatever Cargo.toml says — which is almost never what the
+      # user pushed the tag for. Fail loudly here instead.
+      - name: verify tag matches Cargo.toml version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo_version=$(awk -F\" '/^version = / { print $2; exit }' Cargo.toml)
+          if [ "$tag" != "$cargo_version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME maps to $tag but Cargo.toml says $cargo_version — publish aborted"
+            exit 1
+          fi
+          echo "tag and Cargo.toml agree on version $cargo_version"
+
+      - name: cargo publish
+        env:
+          # `cargo publish` reads this env var by convention. Mapping
+          # explicitly here documents the dependency on the GitHub secret.
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked
