@@ -1,6 +1,6 @@
 [package]
 name = "envroll"
-version = "0.1.5"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.89"
 description = "git for your .env files — local-first, encrypted, single-binary environment manager"
@@ -11,6 +11,12 @@ homepage = "https://github.com/AdriiiPRodri/envroll"
 readme = "README.md"
 keywords = ["env", "dotenv", "secrets", "vault", "cli"]
 categories = ["command-line-utilities", "config", "development-tools"]
+# Trim the crates.io tarball to what a downstream consumer actually needs.
+# The CI and cargo-dist configs only matter to maintainers (they live on
+# GitHub for anyone who wants to read them), and the integration tests
+# depend on `assert_cmd` + a built binary so they're not useful to crate
+# consumers either.
+exclude = [".github/", "dist-workspace.toml", "tests/"]
 
 [[bin]]
 name = "envroll"

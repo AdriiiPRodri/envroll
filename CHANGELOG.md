@@ -8,6 +8,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 under each `## [VERSION]` heading becomes the GitHub release notes for
 that tag. Keep entries user-facing.
 
+## [0.2.0] - 2026-05-01
+
+### Added
+
+- **envroll is now on crates.io.** Install with `cargo install envroll`
+  from any machine that has a Rust toolchain — no need to grab a
+  prebuilt binary or build from source. The published crate ships the
+  same `envroll` binary the GitHub Releases pipeline produces.
+
+### Changed
+
+- The crates.io tarball is **trimmed to what consumers actually need**.
+  The CI workflow (`.github/workflows/`), cargo-dist config
+  (`dist-workspace.toml`), and integration tests (`tests/`) live on
+  GitHub for anyone who wants them but no longer ship inside the
+  published crate. Bundle size dropped from 61 → 52 files
+  (516 → 422 KiB uncompressed).
+- **Test files are now organized by command/feature area** instead of
+  by release version. The old `tests/v0_1_3_features.rs` (which had
+  already grown past v0.1.3 with v0.1.4's `--install` tests) is split
+  into `tests/completions.rs`, `tests/import_export.rs`, and
+  `tests/rename_key.rs`. No behavioral change — same 27 tests, same
+  coverage.
+
+### Note on versioning policy
+
+This is the first release that follows the semver policy correctly for
+a `0.x` crate: **new features get a MINOR bump**, not a PATCH. The
+0.1.0 → 0.1.5 history shipped multiple feature releases as patches
+(basename project IDs, `--target`, completions, import/export,
+rename-key, `--install`) — those tags stay as published, but every
+release from here on gets the right bump. Bug-fix-only releases will
+be `0.2.x`; the next batch of features will be `0.3.0`.
+
 ## [0.1.5] - 2026-05-01
 
 ### Changed
@@ -161,6 +195,7 @@ no SaaS, no daemon.
   design.
 - macOS aarch64 binary (Linux + Windows added in 0.1.1).
 
+[0.2.0]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.0
 [0.1.5]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.5
 [0.1.4]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.4
 [0.1.3]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.3
