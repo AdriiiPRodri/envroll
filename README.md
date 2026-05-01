@@ -14,10 +14,10 @@ A single statically-linked Rust binary that versions, switches, and encrypts env
 ---
 
 <p align="center">
-  <img src="docs/demo.gif" alt="envroll demo: init, fork, set, save, use, exec, diff, log, list" width="100%">
+  <a href="https://github.com/AdriiiPRodri/envroll/blob/main/docs/demo.mp4" title="Click to watch the MP4 version with pause/scrub controls">
+    <img src="https://raw.githubusercontent.com/AdriiiPRodri/envroll/main/docs/demo.gif" alt="envroll demo: init, fork, set, save, use, exec, diff, log, list" width="100%">
+  </a>
 </p>
-
-<p align="center"><sub>▶ <a href="docs/demo.mp4">Watch the MP4 version</a> (with pause/scrub controls).</sub></p>
 
 ---
 
