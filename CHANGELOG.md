@@ -8,6 +8,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 under each `## [VERSION]` heading becomes the GitHub release notes for
 that tag. Keep entries user-facing.
 
+## [0.1.5] - 2026-05-01
+
+### Changed
+
+- **Project IDs are now the human-readable repo basename** when a `git
+  remote get-url origin` is configured. `git@github.com:acme/prowler.git`
+  registers as `prowler` instead of the old `remote-3a1b9c8d4e5f6a7b`. As
+  a side effect, **multiple worktrees of the same repo now share their
+  envs automatically** — they all derive the same basename, so they all
+  point to the same vault entry. The old hash-prefixed format
+  (`remote-<16hex>`) is gone for new projects; the full normalized URL is
+  still persisted in the manifest's `id_input` field, so the rare
+  collision between two unrelated repos that share a basename
+  (`acme/prowler` vs `other/prowler`) is detected and refused with a
+  clear `--id <custom>` hint.
+- Repo basenames are filtered through a filesystem-safe sanitizer:
+  lowercase ASCII alphanumerics, dashes, and underscores survive verbatim;
+  anything else (uppercase, dots, spaces, unicode) is replaced with `-`.
+  `Acme/My-App.git` → `my-app`.
+
+### Migration note
+
+Pre-0.1.5 projects with `remote-<hash>` IDs keep working as-is — the ID
+is recorded in the manifest, not re-derived from the URL on every
+command. To get the new pretty name on an existing project, either:
+
+1. `envroll init --id <new-name>` to re-register at the new ID (the
+   original `remote-<hash>` entry stays in the vault until you `rm -rf`
+   it manually), or
+2. Wait for the v0.2 `envroll migrate-id` command that does this
+   atomically with history preserved.
+
 ## [0.1.4] - 2026-05-01
 
 ### Added
@@ -129,6 +161,7 @@ no SaaS, no daemon.
   design.
 - macOS aarch64 binary (Linux + Windows added in 0.1.1).
 
+[0.1.5]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.5
 [0.1.4]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.4
 [0.1.3]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.3
 [0.1.2]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.2

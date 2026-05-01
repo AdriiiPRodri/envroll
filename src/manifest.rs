@@ -203,10 +203,17 @@ impl IdDerivation {
 /// Derive a project ID for `cwd`.
 ///
 /// Order of precedence:
-/// 1. `override_id` (from `--id`).
+/// 1. `override_id` (from `--id`) — used verbatim.
 /// 2. Normalized `git remote get-url origin` if a libgit2 repo is discoverable
 ///    upward from `cwd` and an `origin` remote with a non-empty URL is set.
-/// 3. SHA-256 prefix of the canonicalized absolute path of `cwd`.
+///    The ID is the **sanitized basename of the URL** (e.g.,
+///    `git@github.com:acme/prowler.git` → `prowler`). All worktrees of the
+///    same repo share an ID and therefore the same envs. The full normalized
+///    URL is persisted in the manifest's `id_input` so `find_project_for_cwd`
+///    can detect the rare collision between two unrelated repos that happen
+///    to share a basename and refuse with a clear `--id <custom>` hint.
+/// 3. SHA-256 prefix of the canonicalized absolute path of `cwd`. Used when
+///    no remote is configured. Does NOT survive `mv` of the project root.
 ///
 /// `cwd` MUST exist; this function calls [`Path::canonicalize`] in case 3.
 pub fn derive_project_id(
@@ -219,11 +226,14 @@ pub fn derive_project_id(
     if let Some(url) = try_get_origin_url(cwd) {
         let normalized = normalize_origin_url(&url);
         if !normalized.is_empty() {
-            let id = format!("remote-{}", short_hash16(normalized.as_bytes()));
-            return Ok(IdDerivation::Remote {
-                id,
-                normalized_url: normalized,
-            });
+            if let Some(id) = repo_basename_from_normalized(&normalized) {
+                return Ok(IdDerivation::Remote {
+                    id,
+                    normalized_url: normalized,
+                });
+            }
+            // Sanitization left an empty string — extremely degenerate URL.
+            // Fall through to the path-derived ID rather than panic.
         }
     }
     let canonical = cwd.canonicalize().map_err(EnvrollError::Io)?;
@@ -232,6 +242,45 @@ pub fn derive_project_id(
         short_hash16(canonical.to_string_lossy().as_bytes())
     );
     Ok(IdDerivation::Path { id })
+}
+
+/// Extract the project ID from a normalized origin URL (the output of
+/// [`normalize_origin_url`], shape `<host>/<path/to/repo>`).
+///
+/// Takes the LAST path segment, lowercases it, replaces any character not
+/// in `[a-z0-9_-]` with `-`, and collapses runs of `-` to a single one.
+/// Returns `None` if the result is empty (e.g., URL with no path component
+/// after the host) so callers can fall back to a path-derived ID.
+fn repo_basename_from_normalized(normalized: &str) -> Option<String> {
+    let last = normalized.rsplit('/').next()?;
+    let sanitized = sanitize_repo_name(last);
+    if sanitized.is_empty() {
+        None
+    } else {
+        Some(sanitized)
+    }
+}
+
+/// Filesystem-safe sanitization for a repo name used as an envroll project ID.
+/// Lowercase ASCII alphanumerics, dashes, and underscores survive verbatim.
+/// Anything else (uppercase, whitespace, dots, slashes, unicode, etc.) is
+/// replaced with `-`. Consecutive `-` are collapsed to one. Leading/trailing
+/// `-` are stripped.
+fn sanitize_repo_name(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut prev_was_dash = false;
+    for ch in input.chars() {
+        let lower = ch.to_ascii_lowercase();
+        let allowed = lower.is_ascii_alphanumeric() || lower == '_' || lower == '-';
+        if allowed {
+            out.push(lower);
+            prev_was_dash = lower == '-';
+        } else if !prev_was_dash {
+            out.push('-');
+            prev_was_dash = true;
+        }
+    }
+    out.trim_matches('-').to_string()
 }
 
 fn try_get_origin_url(cwd: &Path) -> Option<String> {
@@ -430,18 +479,48 @@ mod tests {
     }
 
     #[test]
-    fn derive_uses_origin_url_when_present() {
+    fn derive_uses_origin_url_basename_when_present() {
         let dir = TempDir::new().unwrap();
         init_repo_with_origin(dir.path(), "git@github.com:acme/widgets.git");
         let d = derive_project_id(dir.path(), None).unwrap();
         match d {
             IdDerivation::Remote { id, normalized_url } => {
-                assert!(id.starts_with("remote-"));
-                assert_eq!(id.len(), "remote-".len() + 16);
+                // ID is the sanitized basename — readable, share-able across
+                // worktrees of the same repo.
+                assert_eq!(id, "widgets");
+                // Full normalized URL still in id_input for collision detection.
                 assert_eq!(normalized_url, "github.com/acme/widgets");
             }
             other => panic!("expected Remote, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn derive_basename_strips_dot_git_and_lowercases() {
+        let dir = TempDir::new().unwrap();
+        init_repo_with_origin(dir.path(), "git@github.com:Acme/My-App.git");
+        let d = derive_project_id(dir.path(), None).unwrap();
+        assert_eq!(d.id(), "my-app");
+    }
+
+    #[test]
+    fn derive_basename_sanitizes_unsafe_chars() {
+        // Hypothetical degenerate URL with chars outside [a-z0-9_-].
+        // sanitize_repo_name() collapses runs of non-allowed chars to one `-`
+        // and trims leading/trailing dashes.
+        assert_eq!(sanitize_repo_name("My Cool App!"), "my-cool-app");
+        assert_eq!(sanitize_repo_name("---hello---"), "hello");
+        assert_eq!(sanitize_repo_name("UPPER_case_99"), "upper_case_99");
+        assert_eq!(sanitize_repo_name("@@@"), "");
+    }
+
+    #[test]
+    fn derive_falls_back_to_path_when_basename_sanitizes_to_empty() {
+        // A URL where the path component sanitizes to nothing (degenerate).
+        // We don't try to construct one through normalize_origin_url here
+        // (any real URL produces a usable basename); we exercise the fallback
+        // unit-style by checking the helper directly.
+        assert!(repo_basename_from_normalized("github.com/acme/@@@").is_none());
     }
 
     #[test]
