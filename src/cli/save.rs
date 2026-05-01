@@ -14,7 +14,7 @@ use crate::cli::Context;
 use crate::crypto;
 use crate::errors::{generic, EnvrollError};
 use crate::parser;
-use crate::vault::Mode;
+use crate::vault::{sweep_historical_checkouts, Mode};
 
 #[derive(Debug, ClapArgs)]
 pub struct Args {
@@ -31,6 +31,12 @@ pub struct Args {
 
 pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     let mut prep = open_project(ctx, LockMode::Exclusive)?;
+    let _ = sweep_historical_checkouts(
+        &prep.vault,
+        &prep.repo,
+        prep.project_id(),
+        &prep.project_root,
+    );
 
     if prep.manifest.active.is_empty() {
         return Err(generic(

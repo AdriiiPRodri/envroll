@@ -273,7 +273,7 @@ fn current_with_no_active_env_exits_31() {
         .assert()
         .failure()
         .code(31)
-        .stderr(predicate::str::contains("envroll: no active env"));
+        .stderr(predicate::str::contains("no active env"));
 }
 
 #[test]

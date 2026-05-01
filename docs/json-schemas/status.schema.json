@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "envroll status --format json",
+  "type": "object",
+  "required": ["active", "mode", "clean", "added", "removed", "changed"],
+  "properties": {
+    "active": { "type": "string" },
+    "mode": {
+      "type": "string",
+      "enum": ["symlink", "copy", "unmanaged", "stale-symlink", "foreign", "none"]
+    },
+    "clean": { "type": "boolean" },
+    "active_ref": { "type": ["string", "null"] },
+    "added": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "value"],
+        "properties": {
+          "key": { "type": "string" },
+          "value": { "type": "string" }
+        }
+      }
+    },
+    "removed": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "changed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "value"],
+        "properties": {
+          "key": { "type": "string" },
+          "value": { "type": "string" }
+        }
+      }
+    }
+  }
+}

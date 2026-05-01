@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "envroll list --format json",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["project_id", "envs"],
+    "properties": {
+      "project_id": { "type": "string" },
+      "active": { "type": ["string", "null"] },
+      "envs": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    }
+  }
+}

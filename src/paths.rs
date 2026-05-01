@@ -3,9 +3,16 @@
 //! Precedence for the vault root, highest first:
 //! 1. The `--vault <path>` global CLI flag (testing escape hatch, design.md D16).
 //! 2. The `XDG_DATA_HOME` environment variable (`<XDG_DATA_HOME>/envroll`).
-//! 3. The platform default via `directories::ProjectDirs`
-//!    (`~/.local/share/envroll` on Linux, `~/Library/Application Support/envroll` on macOS).
+//! 3. On Unix (macOS + Linux): `$HOME/.local/share/envroll`.
+//!    On Windows: the platform default via `directories::ProjectDirs`.
+//!
+//! macOS deliberately uses the XDG-style path under `$HOME/.local/share/`
+//! instead of the OS-native `~/Library/Application Support/envroll`. The
+//! native path contains spaces, which is hostile to shell pipelines, and
+//! diverging between Linux and macOS for a CLI tool is a needless ergonomic
+//! tax — the same scripts and muscle memory should work on both.
 
+#[cfg(not(unix))]
 use directories::ProjectDirs;
 use std::path::{Path, PathBuf};
 
@@ -26,9 +33,24 @@ pub fn resolve_vault_root(cli_vault_override: Option<&Path>) -> Result<PathBuf, 
             return Ok(p.join("envroll"));
         }
     }
-    ProjectDirs::from("", "", "envroll")
-        .map(|pd| pd.data_dir().to_path_buf())
-        .ok_or_else(|| generic("could not resolve a home directory for the vault"))
+    #[cfg(unix)]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            let p = PathBuf::from(home);
+            if !p.as_os_str().is_empty() {
+                return Ok(p.join(".local/share/envroll"));
+            }
+        }
+        Err(generic(
+            "could not resolve a home directory for the vault ($HOME unset)",
+        ))
+    }
+    #[cfg(not(unix))]
+    {
+        ProjectDirs::from("", "", "envroll")
+            .map(|pd| pd.data_dir().to_path_buf())
+            .ok_or_else(|| generic("could not resolve a home directory for the vault"))
+    }
 }
 
 /// Path to the vault's libgit2 repo directory.
@@ -153,6 +175,29 @@ mod tests {
         match prev {
             Some(v) => std::env::set_var("XDG_DATA_HOME", v),
             None => std::env::remove_var("XDG_DATA_HOME"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn default_unix_falls_back_to_xdg_layout_under_home() {
+        let prev_xdg = std::env::var_os("XDG_DATA_HOME");
+        let prev_home = std::env::var_os("HOME");
+        std::env::remove_var("XDG_DATA_HOME");
+        std::env::set_var("HOME", "/tmp/some-fake-home");
+        let resolved = resolve_vault_root(None).unwrap();
+        assert_eq!(
+            resolved,
+            PathBuf::from("/tmp/some-fake-home/.local/share/envroll")
+        );
+        // restore
+        match prev_xdg {
+            Some(v) => std::env::set_var("XDG_DATA_HOME", v),
+            None => std::env::remove_var("XDG_DATA_HOME"),
+        }
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
         }
     }
 

@@ -7,9 +7,56 @@ A single statically-linked Rust binary that versions, switches, and encrypts env
   <a href="https://crates.io/crates/envroll"><img src="https://img.shields.io/crates/v/envroll.svg" alt="crates.io"></a>
   <a href="https://github.com/your-org/envroll/actions"><img src="https://img.shields.io/github/actions/workflow/status/your-org/envroll/ci.yml?branch=main" alt="CI"></a>
   <a href="https://github.com/your-org/envroll/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
-  <img src="https://img.shields.io/badge/rust-1.78%2B-orange.svg" alt="Rust 1.78+">
+  <img src="https://img.shields.io/badge/rust-1.89%2B-orange.svg" alt="Rust 1.89+">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platforms">
 </p>
+
+---
+
+## What envroll does and does not protect against
+
+> **Read this first.** envroll is honest about its threat model. If your needs do not fit inside what envroll protects against, use a different tool.
+
+**envroll protects against:**
+
+- A passive attacker who reads the configured vault remote (public GitHub repo, leaky S3 bucket, accidental tweet of the URL). All env contents are age-encrypted; without the passphrase the attacker sees only ciphertext + commit metadata (timestamps, commit messages, env *names*).
+- A lost or stolen laptop **with full-disk encryption enabled and locked**. Vault content is still encrypted at the envroll layer, so even if FDE is later defeated the attacker still needs the passphrase.
+- Casual `.env` exposure in chat, screenshots, screen-shares, or tickets — provided the user pasted the *encrypted* `.age` file, not the plaintext checkout. envroll cannot prevent users from pasting plaintext.
+- Unauthorized writes to the vault remote: age messages have a built-in HMAC, so any tampered ciphertext fails to decrypt with `file corrupt or tampered`.
+
+**envroll does NOT protect against:**
+
+- An active attacker with shell access on the user's machine. They can read `.checkout/<name>` directly.
+- A malicious remote serving a *rolled-back but still valid* commit. age's MAC catches modification but not "an older legitimate ciphertext is the current HEAD". Mitigation: `git log` the vault and verify expected history. v0.2 may add signed tags.
+- Keyloggers or compromised terminal emulators. The passphrase is typed in the user's terminal; if that terminal is compromised, so is the vault.
+- Weak passphrases. scrypt makes brute-force expensive but not impossible. We recommend `>= 6` random words from a long wordlist or equivalent entropy.
+- The user committing plaintext somewhere envroll can't see (e.g., pasting `.env` into a chat, configuring their shell to log env vars).
+- Side channels (timing, CPU usage). Out of scope.
+- envroll's own dependency supply chain. Mitigation: pin `Cargo.lock`, use `cargo audit` / `cargo deny` in CI.
+
+## Back up your passphrase
+
+The passphrase you choose at `envroll init` is the **only** thing standing between you and the contents of every env you ever encrypt. **There is no recovery.** No support email, no master key, no escape hatch — that is the design.
+
+Before you run `envroll fork` even once:
+
+1. Pick a passphrase with real entropy. Six random words from a long wordlist (Diceware, EFF large list) is a good baseline. Do not pick a passphrase a human could plausibly guess.
+2. Write it down in a password manager — 1Password, Bitwarden, KeePass, an encrypted note in your Apple Keychain — anywhere with its own backup story.
+3. If your team shares a vault, share the passphrase out of band: never in the same channel where the encrypted vault travels.
+
+`envroll init` prints this reminder loudly on first run. Heed it.
+
+## Recovery
+
+| Scenario | Recovery |
+| --- | --- |
+| Forgotten passphrase | **No recovery.** All envs are inaccessible. Documented loudly in the README and printed by `envroll init` immediately after passphrase confirmation. Recommendation: store the passphrase in a password manager. |
+| Corrupt single `<name>.age` file | Use `envroll log <name>` to find a previous commit that decrypts cleanly, then `envroll use <name>@<hash>` to recover. Optionally `envroll save -m "recovered from <hash>"` to make it the new tip. |
+| Corrupt vault git directory | If a remote is configured: `mv ~/.local/share/envroll ~/.local/share/envroll.broken && git clone <remote> ~/.local/share/envroll`. The user's passphrase is unchanged and decrypts the cloned vault. If no remote, the vault is lost. |
+| **Deleted vault directory** (e.g., `rm -rf ~/.local/share/envroll/`) | Same as "corrupt vault git" — re-clone from remote if synced. The project's `./.env` symlinks become dangling on this machine; the next `envroll use` recreates `.checkout/`. If no remote, all envs are lost. |
+| Deleted `.checkout/` directory | Harmless. Recreated on next `envroll use`. The user may see dangling symlinks at `./.env` until the next use; runtime inference will treat these as "stale, re-decrypt on next use". |
+| Interrupted operation mid-write | Orphan tempfile is detected and cleaned up on next invocation. Destination file is never partially written because the rename is atomic. |
+| Vault on a different machine | First `envroll init` on the new machine creates a fresh vault; setting the same remote and `envroll sync` pulls the encrypted history. The user is prompted for the same passphrase to read it. |
 
 ---
 
@@ -23,7 +70,7 @@ That's `envroll`.
 
 ```text
                                     ┌─────────────────────────┐
-                                    │     ~/.local/share/envroll │
+                                    │  ~/.local/share/envroll │
    ./.env  ──────── symlink ──────▶ │   (encrypted git vault) │
                                     │                         │
    (project repo                    │  dev.age   staging.age  │
@@ -35,58 +82,6 @@ That's `envroll`.
                                        any git remote you own
                                   (encrypted, safe even if public)
 ```
-
----
-
-## envroll in 30 seconds
-
-```bash
-# One-time vault setup (asks for a passphrase, twice)
-$ envroll init
-
-# Save the .env you already have as a new env
-$ envroll fork dev
-saved dev as 7a1f3c2
-
-# Branch it for staging, edit, save
-$ envroll fork staging -m "swap to staging DB"
-$ envroll edit staging
-$ envroll save -m "added stripe test key"
-
-# Switch back and forth — the active .env is just a symlink swap
-$ envroll use dev
-now using dev
-$ envroll use staging
-now using staging
-
-# Run a one-off command with a different env injected, no symlink change
-$ envroll exec prod -- node scripts/migrate.js
-
-# History, diffs, single-key ops — all the things you do with git
-$ envroll log staging
-* 9c4e1ab  2026-04-30T15:42  added stripe test key       +1 -0 ~0
-* 7a1f3c2  2026-04-30T15:11  swap to staging DB          +0 -0 ~1
-* 4e8d2af  2026-04-29T18:03  initial save of ./.env      +12 -0 ~0
-
-$ envroll diff dev staging --show-values
-~DATABASE_URL  postgres://localhost/app  ->  postgres://staging.db/app
-~DEBUG         true                      ->  false
-+STRIPE_KEY    sk_test_xxx
-```
-
-That's the whole product. No dashboard, no agent, no monthly bill.
-
----
-
-## Why envroll
-
-- **Local-first, no account.** Your envs live on your disk. Sync is opt-in and points at any git remote you own — GitHub, GitLab, your home Forgejo, a USB drive with `git init --bare`, whatever.
-- **Encrypted at rest, always.** Every env blob in the vault is age-encrypted with a passphrase only you know. Push to a public repo if you want — the contents are unreadable without the key.
-- **Real history, not backups.** `envroll log` and `envroll diff` are git-grade. Every change is a real commit with structured metadata. You can always go back.
-- **Atomic switches.** `envroll use staging` is a symlink swap. There is no edit-window where `./.env` is half-written. Other processes never see a partial file.
-- **One verb you don't have to learn.** Subcommands follow git/cargo conventions. `init`, `fork`, `use`, `save`, `log`, `diff`, `exec`, `sync`. If you've used git, you've used envroll.
-- **Single binary.** Statically linked. Drop it in your `$PATH` and go. No Python runtime, no Node, no Docker, no `~/.envroll/venv/`.
-- **Scriptable.** `--format json` everywhere. Built for CI, shell pipelines, and editor integrations. Stable exit codes, no surprises.
 
 ---
 
@@ -105,11 +100,13 @@ curl -LsSf https://github.com/your-org/envroll/releases/latest/download/envroll-
 
 Or grab a prebuilt binary from the [Releases](https://github.com/your-org/envroll/releases) page. SHA-256 sums are signed.
 
-**Platforms:** macOS (x86_64, aarch64) and Linux (x86_64, aarch64) are first-class. Windows is supported on a best-effort basis with a copy-mode fallback for environments without symlink privileges.
+**Platforms:** macOS (x86_64, aarch64) and Linux (x86_64, aarch64) are first-class. Windows is supported on a best-effort basis with a copy-mode fallback for environments without symlink privileges (set `ENVROLL_USE_COPY=1` or enable Windows Developer Mode).
 
 ---
 
 ## Quickstart
+
+The four verbs you'll use every day are `init`, `fork`, `use`, and `save`. There is **no `save <name>`** form — `fork <name>` is the canonical way to create a new env.
 
 ### 1. Initialize the vault
 
@@ -125,43 +122,89 @@ confirm: ********
   IMPORTANT: write your passphrase down somewhere safe.
   If you lose it, every env in this vault is gone forever.
   No recovery, no support email, no exceptions.
-
-$ ls -la .env
-.env -> /Users/you/.local/share/envroll/projects/remote-3a1b9c8d4e5f6a7b/.checkout/dev
 ```
 
-### 2. Branch and edit
+### 2. Fork an env from `./.env` (or from the active env)
+
+```bash
+$ echo "DATABASE_URL=postgres://localhost/app" > .env
+$ envroll fork dev
+forked → dev (now active)
+
+# ./.env is now a symlink into the encrypted vault's checkout area:
+$ ls -la .env
+.env -> ~/.local/share/envroll/projects/remote-3a.../​.checkout/dev
+```
+
+### 3. Branch it
 
 ```bash
 $ envroll fork staging -m "snapshot before db migration"
-saved staging as f4d8a1c
-now using staging
+forked → staging (now active)
 
 $ envroll edit staging
 # (your $EDITOR opens; change DATABASE_URL, save, quit)
 
 $ envroll save -m "point at staging db"
-saved staging as 9c4e1ab
+saved staging
 ```
 
-### 3. Run a command in a one-off env
+### 4. Switch atomically
+
+```bash
+$ envroll use dev
+now using dev
+
+$ envroll use staging
+now using staging
+```
+
+### 5. Run a one-off command in another env
 
 ```bash
 $ envroll exec prod -- pnpm run smoke-test
 # pnpm sees prod's vars, ./.env is untouched
 ```
 
-### 4. (Optional) Sync to a remote
+### 6. (Optional) Sync to a remote
 
 ```bash
 $ envroll remote set git@github.com:you/envroll-vault.git
-remote set: git@github.com:you/envroll-vault.git
+remote set to git@github.com:you/envroll-vault.git
 
 $ envroll sync
-pushed 4 commits to origin
+pushed (initial)
 ```
 
 The remote can be public, private, on-prem, or a directory mounted from a NAS. envroll doesn't care — every env blob is already encrypted.
+
+---
+
+## Commands reference
+
+| Command | What it does | Lock |
+| --- | --- | --- |
+| `envroll init [--id <id>] [--verify-passphrase]` | Initialize the vault (first run) and register this directory. `--verify-passphrase` re-prompts and tests the canary. | exclusive |
+| `envroll projects [--format json]` | List every registered project on this machine. | none |
+| `envroll list` (alias `ls`) `[--all] [--format json]` | List envs in the current project (or all projects with `--all`). | shared |
+| `envroll current` | Print the active env name. | none |
+| `envroll fork <name> [-m <msg>] [--force]` | Create a new env from the active env or `./.env`. | exclusive |
+| `envroll save [-m <msg>] [--force]` | Save the working copy to the active env. `--force` deliberately rewinds when pinned to a historical ref. | exclusive |
+| `envroll use <ref> [--force \| --rescue <name>]` | Activate an env. `<ref>` is `<name>` (latest), `<name>@<short-hash>`, or `<name>@~N`. | exclusive |
+| `envroll status [--show-values] [--format json]` | Active env, mode (symlink / copy), dirty state, key-level diff. Values masked unless `--show-values`. | shared |
+| `envroll rename <old> <new> [--force]` | Rename an env in place; libgit2 file-rename keeps history. | exclusive |
+| `envroll rm <name>` | Remove an env. Use the global `--yes` to skip the confirmation prompt. | exclusive |
+| `envroll edit <name>` | Open an env in `$EDITOR` (fallbacks: `$VISUAL` → `vi`/`vim` on Unix, `notepad` on Windows). The vault lock is released for the editor's lifetime. | exclusive (then released) |
+| `envroll log <name> [--format json]` | Commit history for the env, newest-first, with `+N -M ~K` summaries. | shared |
+| `envroll diff <a> <b> [--show-values] [--format json]` | Key-level diff between any two refs. | shared |
+| `envroll get <KEY> [--from <env>]` | Print a single value to stdout (script-friendly, never masked). Exits 20 if missing. | shared |
+| `envroll set <KEY=value> [--in <env>]` | Set or update a single key. | exclusive |
+| `envroll copy <KEY> --from <a> --to <b>` | Copy a single key between envs. | exclusive |
+| `envroll exec <ref> -- <cmd> [args...]` | Run a command with the env's vars injected. Decrypts to memory only — no plaintext on disk. `--no-override` lets parent-shell vars win on key collision. | shared (released before child spawn) |
+| `envroll remote {set <url> \| show \| unset}` | Configure the optional sync remote. `set` validates the URL scheme but makes no network call. | varies |
+| `envroll sync` | Pull-then-push the vault git history. Refuses if the vault working tree is dirty. Refuses on divergence and tells you exactly how to resolve. | exclusive |
+
+**Global flags** (work on every subcommand): `--format <human|json>`, `--yes`, `--log <off|error|warn|info|debug>`, `--no-color` (also honors `NO_COLOR`), `--passphrase-stdin`, `--passphrase-env <NAME>`. The `--vault <path>` flag exists for testing only and is hidden from `--help`.
 
 ---
 
@@ -172,7 +215,7 @@ The remote can be public, private, on-prem, or a directory mounted from a NAS. e
 ├── .git/                          libgit2-managed, every change is a real commit
 ├── .gitignore                     keeps plaintext checkouts out of history
 ├── .canary.age                    "is the passphrase right?" sentinel
-├── .envroll-version                  on-disk schema pin
+├── .envroll-version               on-disk schema pin
 └── projects/
     └── remote-3a1b9c8d4e5f6a7b/
         ├── manifest.toml          project state (active env, etc.)
@@ -208,53 +251,45 @@ Encryption is [age](https://github.com/FiloSottile/age) in scrypt-passphrase mod
 
 ---
 
-## Compared to ...
+## Supported `.env` syntax
 
-| Tool | Local-first | Versioned | Encrypted at rest | Atomic switch | Single binary | Scope |
-| --- | :---: | :---: | :---: | :---: | :---: | --- |
-| **envroll** | yes | yes (libgit2) | yes (age, passphrase) | yes (symlink swap) | yes | Manage many envs per project |
-| `direnv` | yes | no | no | no | yes | Activate one env on `cd` |
-| `sops` | yes | via your repo | yes (KMS / age / GPG) | no | yes | Encrypt arbitrary files |
-| `lazyenv` | yes | no | no | no | yes | TUI editor for `.env` |
-| `dotenv-vault` | partial | partial | yes | no | no | Hosted secrets sharing |
-| Doppler / Infisical | no | yes (server) | yes | yes | no | SaaS secrets platform |
+envroll **does not roll its own `.env` parser**. Every read goes through the [`dotenvy`](https://crates.io/crates/dotenvy) crate, which is the most actively maintained `.env` parser in the Rust ecosystem and the de-facto reference for `.env` semantics in Rust services.
 
-envroll fills the gap where you want **`direnv`-style local control** with **SaaS-style versioning and safety** — without paying for SaaS or running a server.
+What's reliably supported:
 
----
+- `KEY=value` and `export KEY=value` (the `export ` prefix is stripped on parse).
+- Whitespace around `=` is ignored on the input side. Emitted output is canonical (`KEY="value"`).
+- Single- and double-quoted values; the four standard escapes `\\`, `\"`, `\$`, and `\n` inside double-quoted values.
+- Empty values: `EMPTY=` is parsed as an empty string.
+- Multi-line values inside double quotes (use `\n` as the line break).
+- Comments starting with `#` on their own line, and trailing comments after a value.
+- Duplicate keys: the **last assignment wins** (matches `dotenvy`'s runtime behavior).
 
-## Security: what envroll protects against, and what it doesn't
+What `envroll save`'s "nothing to save" detection ignores:
 
-envroll is honest about its threat model. Read this section before you trust it with anything that matters.
+- Key reordering. `A=1\nB=2` and `B=2\nA=1` are equivalent.
+- Comment edits and blank-line changes.
+- A missing trailing newline at end-of-file.
 
-**envroll protects against**
+What it preserves as a real change:
 
-- A passive attacker who reads your sync remote — public repo, leaky bucket, accidental tweet. The contents are age-encrypted; without your passphrase the attacker sees ciphertext, env names, and timestamps. Nothing else.
-- A lost or stolen laptop with full-disk encryption enabled and locked.
-- Casual exposure in chat, screenshots, screen-shares — provided you pasted the encrypted blob, not the plaintext.
-- Tampering with the remote: age messages are MAC-authenticated. Modified ciphertext fails to decrypt and you get a clear error.
+- Any byte difference inside a value (including trailing whitespace inside quotes).
+- Added or removed keys.
 
-**envroll does NOT protect against**
-
-- An active attacker with shell access on your machine. They can read `.checkout/<env>` directly — it's plaintext on disk.
-- A malicious remote that replays an older but valid commit. age catches modification; it does not catch rollback to a previously-valid version. Inspect `git log` of the vault if you care.
-- Keyloggers, compromised terminals, weak passphrases.
-- You committing your plaintext somewhere envroll can't see (a chat, a paste-bin, a `.env.bak` outside the vault).
-
-If your threat model includes any of those, envroll is not the right tool — and we'll happily tell you so. Use a hardware-backed secrets manager.
+If `dotenvy` cannot parse your file, `envroll save` exits 12 (`parse error`) with the parser's message — it never silently falls back to byte-comparison.
 
 ---
 
-## Recovery
+## v0.1 limitations (read these before adopting)
 
-| What broke | What to do |
-| --- | --- |
-| **Forgot your passphrase** | No recovery. Everything in the vault is gone. Back up your passphrase in a password manager. envroll will not save you from this. |
-| **Single env file is corrupt** | `envroll log <name>` shows history. `envroll use <name>@<hash>` rolls back to a previous commit. `envroll save -m "recovered"` makes that the new tip. |
-| **Vault git is corrupt** | If you have a remote: `mv ~/.local/share/envroll ~/envroll-broken && git clone <remote> ~/.local/share/envroll`. Your passphrase still decrypts the cloned vault. |
-| **`.checkout/` got deleted** | Harmless. The next `envroll use` recreates it. |
-| **An envroll command was killed mid-write** | Tempfiles use a recognizable pattern (`.envroll-tmp.<pid>.<rand>`) and are swept on the next run. The destination file is never partially written — every write is atomic. |
-| **Working on a new machine** | `envroll init` (creates a fresh vault), set the same remote, `envroll sync`, type the same passphrase. Done. |
+These are deliberate v0.1 trade-offs. Each has a tracking direction for v0.2+.
+
+- **No passphrase rotation command.** Workaround: `envroll exec <each env> -- printenv > backup` for every env, then `mv ~/.local/share/envroll ~/.local/share/envroll.old`, run `envroll init` with the new passphrase, and re-`fork` each backup. v0.2 will ship `envroll passphrase change` as a first-class command.
+- **No session cache, no `envroll-agent`.** Every encrypted-content operation prompts for the passphrase (or reads `--passphrase-stdin` / `$ENVROLL_PASSPHRASE`). v0.3 may add a session cache or daemon.
+- **No auto-merge or auto-rebase on `sync`.** When two machines push divergent histories, envroll refuses and tells you to resolve manually with regular git tools in `~/.local/share/envroll/`. v0.2 will add per-blob non-conflicting auto-rebase for the common case where two machines touched different envs entirely.
+- **No Windows-first parity.** macOS and Linux are tier-1; Windows is best-effort with a copy-mode fallback (`ENVROLL_USE_COPY=1` or Developer Mode). The CLI surface is identical, but the symlink path requires a privilege that Windows doesn't grant by default.
+- **Unsaved local edits to `./.env` are lost on `envroll use`.** v0.1 does not warn or prompt — `use` overwrites unconditionally. Use `envroll status` to spot dirty state before switching. v0.2 may add a `--force-clobber` confirmation prompt.
+- **Concurrent same-env mutation from two terminals is undefined.** The vault has a single advisory lock, not per-env locks. If two shells `envroll set` into the same env at the same time, the last writer wins on `.checkout/<name>` and the commit ordering depends on which terminal grabbed the lock first. v0.2 may add per-env advisory locks if anyone hits this in practice.
 
 ---
 
@@ -264,7 +299,7 @@ envroll reads passphrases from three sources, in this order:
 
 1. `--passphrase-stdin` (preferred — secrets piped from stdin do not appear in `ps`).
 2. Interactive TTY prompt (when stdin is a terminal).
-3. The `ENVROLL_PASSPHRASE` env var (last resort; visible in `/proc` and parent process snapshots).
+3. The `ENVROLL_PASSPHRASE` env var (last resort; visible in `/proc` and parent-process snapshots). The variable name can be overridden with `--passphrase-env <NAME>` for organizations that prefer a different convention.
 
 ```bash
 # In CI
@@ -274,7 +309,22 @@ pass envroll-vault | envroll save --passphrase-stdin -m "deploy"
 ENVROLL_PASSPHRASE=$VAULT_PASS envroll exec prod -- ./run.sh
 ```
 
-`--format json` is supported on every read command (`projects`, `list`, `log`, `diff`, `status`) with a stable schema for tooling. Exit codes are stable from `1.0` onward.
+`--format json` is supported on every read command (`projects`, `list`, `log`, `diff`, `status`) with a stable schema for tooling. Schemas live under [`docs/json-schemas/`](docs/json-schemas/) and are versioned alongside the binary. Exit codes are stable from `1.0` onward (codes 10–59 are frozen; 60–99 reserved for v2.x).
+
+---
+
+## Compared to ...
+
+| Tool | Local-first | Versioned | Encrypted at rest | Atomic switch | Single binary | Scope |
+| --- | :---: | :---: | :---: | :---: | :---: | --- |
+| **envroll** | yes | yes (libgit2) | yes (age, passphrase) | yes (symlink swap) | yes | Manage many envs per project |
+| `direnv` | yes | no | no | no | yes | Activate one env on `cd` |
+| `sops` | yes | via your repo | yes (KMS / age / GPG) | no | yes | Encrypt arbitrary files |
+| `lazyenv` | yes | no | no | no | yes | TUI editor for `.env` |
+| `envx` | yes | no | no | no | yes | Run a command with `.env` vars injected |
+| Doppler | no | yes (server) | yes | yes | no | SaaS secrets platform |
+
+envroll fills the gap where you want **`direnv`-style local control** with **SaaS-style versioning and safety** — without paying for SaaS or running a server.
 
 ---
 
@@ -294,6 +344,8 @@ What's **not** on the roadmap, ever:
 - A required cloud account.
 - Telemetry, analytics, "anonymous usage data".
 - Plaintext envs leaving your machine. Period.
+
+See [SECURITY.md](SECURITY.md) for the full threat model and how to report vulnerabilities.
 
 ---
 

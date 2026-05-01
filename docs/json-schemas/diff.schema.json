@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "envroll diff --format json",
+  "type": "object",
+  "required": ["a", "b", "added", "removed", "changed"],
+  "properties": {
+    "a": { "type": "string" },
+    "b": { "type": "string" },
+    "added": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "value"],
+        "properties": {
+          "key": { "type": "string" },
+          "value": { "type": "string" }
+        }
+      }
+    },
+    "removed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "value"],
+        "properties": {
+          "key": { "type": "string" },
+          "value": { "type": "string" }
+        }
+      }
+    },
+    "changed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "a", "b"],
+        "properties": {
+          "key": { "type": "string" },
+          "a": { "type": "string" },
+          "b": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -143,21 +143,30 @@ fn print_human(rows: &[ProjectRow], color: bool) {
     );
     for r in rows {
         let active_label = r.active.as_deref().unwrap_or("-");
-        let active_styled = if r.active.is_some() {
-            styled(use_color_now, style_active(), active_label)
+        // Pad the raw label first, then wrap only the label portion in ANSI
+        // codes — Rust's `{:<N}` formatter counts bytes, and a styled string
+        // is ~12 bytes longer than its visible width, so styling-then-padding
+        // collapses the column when the active name is shorter than the
+        // header.
+        let trailing = active_w.saturating_sub(active_label.len());
+        let active_cell = if r.active.is_some() {
+            format!(
+                "{}{}",
+                styled(use_color_now, style_active(), active_label),
+                " ".repeat(trailing)
+            )
         } else {
-            active_label.to_string()
+            format!("{:<active_w$}", active_label, active_w = active_w)
         };
         println!(
-            "{:<id_w$}  {:>envs_w$}  {:<active_w$}  {:<source_w$}  {}",
+            "{:<id_w$}  {:>envs_w$}  {}  {:<source_w$}  {}",
             r.id,
             r.envs,
-            active_styled,
+            active_cell,
             id_source_str(r.id_source),
             r.created_at.to_rfc3339(),
             id_w = id_w,
             envs_w = envs_w,
-            active_w = active_w,
             source_w = source_w,
         );
     }

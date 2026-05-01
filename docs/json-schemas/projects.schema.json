@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "envroll projects --format json",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "id_source", "envs", "active", "created_at"],
+    "properties": {
+      "id": { "type": "string" },
+      "id_source": {
+        "type": "string",
+        "enum": ["remote", "path", "manual"]
+      },
+      "id_input": { "type": "string" },
+      "envs": { "type": "integer", "minimum": 0 },
+      "active": { "type": "string" },
+      "created_at": { "type": "string", "format": "date-time" }
+    }
+  }
+}

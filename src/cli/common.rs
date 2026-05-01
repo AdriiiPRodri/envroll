@@ -24,7 +24,7 @@ use crate::paths::{
 };
 use crate::prompt::{read_passphrase, PassphraseSources};
 use crate::vault::fs as vfs;
-use crate::vault::git::VaultRepo;
+use crate::vault::git::{RefForm, VaultRepo};
 use crate::vault::{infer_mode, Mode, Vault};
 
 /// Modes for [`open_project`]. Determines which lock we take and whether the
@@ -339,4 +339,166 @@ To intentionally rewind, run:       envroll save --force"
 /// `<name>@<short-hash>`. Returns `None` if the ref doesn't have an `@`.
 pub fn parse_active_ref_hash(active_ref: &str) -> Option<&str> {
     active_ref.split_once('@').map(|(_, h)| h)
+}
+
+/// Parse a `<ref>` argument shared between `use`, `exec`, `log`, `diff` per
+/// design.md D5. Forms:
+/// - `<name>` — the env's tip ([`RefForm::Latest`]).
+/// - `<name>@<short-hash>` — short hash, MUST be `>= 7` ASCII hex chars.
+/// - `<name>@~N` — relative offset, `N >= 1`.
+///
+/// Errors map to [`EnvrollError::RefNotFound`] (exit 21) so callers can treat
+/// every malformed-ref case uniformly. The empty-name guard catches inputs
+/// like `@deadbeef` that would otherwise sneak past as zero-length env names.
+pub fn parse_ref(s: &str) -> Result<(String, RefForm), EnvrollError> {
+    let (name, suffix) = match s.split_once('@') {
+        None => return Ok((s.to_string(), RefForm::Latest)),
+        Some((n, sfx)) => (n, sfx),
+    };
+    if name.is_empty() {
+        return Err(EnvrollError::RefNotFound(format!("invalid ref: {s}")));
+    }
+    if suffix.is_empty() {
+        return Err(EnvrollError::RefNotFound(format!(
+            "ref has trailing `@` with no hash or offset: {s}"
+        )));
+    }
+    if let Some(rest) = suffix.strip_prefix('~') {
+        let n: u32 = rest
+            .parse()
+            .map_err(|_| EnvrollError::RefNotFound(format!("invalid offset in ref: {s}")))?;
+        if n == 0 {
+            return Err(EnvrollError::RefNotFound(format!(
+                "offset must be >= 1: {s}"
+            )));
+        }
+        return Ok((name.to_string(), RefForm::Offset(n)));
+    }
+    if suffix.len() < 7 {
+        return Err(EnvrollError::RefNotFound(format!(
+            "short hash must be >= 7 hex chars: {s}"
+        )));
+    }
+    if !suffix.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(EnvrollError::RefNotFound(format!(
+            "short hash must be hex: {s}"
+        )));
+    }
+    Ok((name.to_string(), RefForm::ShortHash(suffix.to_string())))
+}
+
+/// 12-hex-char prefix of an OID per design.md D5. Used as the canonical
+/// suffix on historical checkout filenames `<name>@<12hex>`.
+pub fn short_oid_12(oid: git2::Oid) -> String {
+    let s = oid.to_string();
+    s[..12].to_string()
+}
+
+/// List the env names registered in `prep`'s project, alphabetically sorted.
+/// Used by the missing-env-name error helpers to give a useful hint instead
+/// of clap's bare "the following required arguments were not provided" line.
+pub fn list_env_names(prep: &PreparedProject) -> Vec<String> {
+    let envs_dir = crate::paths::project_envs_dir(prep.vault.root(), prep.project_id());
+    let mut names: Vec<String> = std::fs::read_dir(&envs_dir)
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let p = e.path();
+            let stem = p.file_stem()?.to_str()?.to_string();
+            let ext = p.extension().and_then(|s| s.to_str())?;
+            if ext.eq_ignore_ascii_case("age") {
+                Some(stem)
+            } else {
+                None
+            }
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+/// Build a "no env name given" error for a command whose positional refers
+/// to an EXISTING env (use, edit, rm, log, diff, exec, rename's first arg).
+/// Lists the envs in the current project so the user does not have to
+/// context-switch to `envroll list`.
+///
+/// `usage_line` is the documented invocation shown under the env list
+/// (e.g., `"envroll log <ENV>"`).
+pub fn missing_existing_env_error(prep: &PreparedProject, usage_line: &str) -> EnvrollError {
+    let names = list_env_names(prep);
+    if names.is_empty() {
+        return EnvrollError::Generic(format!(
+            "no env name given, and this project has no envs yet. \
+             Create one with `envroll fork <name>`.\nusage: {usage_line}"
+        ));
+    }
+    EnvrollError::Generic(format!(
+        "no env name given. Envs in this project: {}\nusage: {usage_line}",
+        names.join(", ")
+    ))
+}
+
+/// Variant of [`missing_existing_env_error`] for commands whose positional
+/// is the name of a NEW env that must NOT collide with an existing one
+/// (currently just `fork`). The list is framed as "names to avoid" instead
+/// of "pick one".
+pub fn missing_new_env_error(prep: &PreparedProject, usage_line: &str) -> EnvrollError {
+    let names = list_env_names(prep);
+    if names.is_empty() {
+        return EnvrollError::Generic(format!("no name given.\nusage: {usage_line}"));
+    }
+    EnvrollError::Generic(format!(
+        "no name given. Pick something other than the existing envs ({}).\nusage: {usage_line}",
+        names.join(", ")
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_ref_bare_name_is_latest() {
+        let (n, f) = parse_ref("dev").unwrap();
+        assert_eq!(n, "dev");
+        assert!(matches!(f, RefForm::Latest));
+    }
+
+    #[test]
+    fn parse_ref_short_hash_minimum_seven_chars() {
+        let err = parse_ref("dev@abc1234").err().is_none(); // exactly 7
+        assert!(err);
+        let err = parse_ref("dev@abc123").unwrap_err(); // 6 — too short
+        assert!(matches!(err, EnvrollError::RefNotFound(_)));
+    }
+
+    #[test]
+    fn parse_ref_short_hash_must_be_hex() {
+        let err = parse_ref("dev@xyzxyzxyz").unwrap_err();
+        assert!(matches!(err, EnvrollError::RefNotFound(_)));
+    }
+
+    #[test]
+    fn parse_ref_offset_form() {
+        let (n, f) = parse_ref("dev@~3").unwrap();
+        assert_eq!(n, "dev");
+        match f {
+            RefForm::Offset(3) => {}
+            _ => panic!("expected Offset(3)"),
+        }
+    }
+
+    #[test]
+    fn parse_ref_offset_zero_is_rejected() {
+        let err = parse_ref("dev@~0").unwrap_err();
+        assert!(matches!(err, EnvrollError::RefNotFound(_)));
+    }
+
+    #[test]
+    fn parse_ref_empty_name_is_rejected() {
+        let err = parse_ref("@deadbeefcafe").unwrap_err();
+        assert!(matches!(err, EnvrollError::RefNotFound(_)));
+    }
 }

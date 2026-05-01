@@ -10,16 +10,19 @@ use std::process::Command;
 
 use clap::Args as ClapArgs;
 
-use crate::cli::common::{open_project, read_pass_and_verify, write_checkout, LockMode};
+use crate::cli::common::{
+    missing_existing_env_error, open_project, read_pass_and_verify, write_checkout, LockMode,
+};
 use crate::cli::Context;
 use crate::crypto;
 use crate::errors::{generic, EnvrollError};
-use crate::vault::Mode;
+use crate::vault::{sweep_historical_checkouts, Mode};
 
 #[derive(Debug, ClapArgs)]
 pub struct Args {
-    /// Env name to open.
-    pub name: String,
+    /// Env name to open in `$EDITOR`.
+    #[arg(value_name = "ENV")]
+    pub name: Option<String>,
 }
 
 pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
@@ -28,12 +31,22 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     // before spawning the editor.
     let editor_target = {
         let mut prep = open_project(ctx, LockMode::Exclusive)?;
+        let _ = sweep_historical_checkouts(
+            &prep.vault,
+            &prep.repo,
+            prep.project_id(),
+            &prep.project_root,
+        );
 
-        let blob = prep.env_blob_path(&args.name);
+        let name = match args.name {
+            Some(n) => n,
+            None => return Err(missing_existing_env_error(&prep, "envroll edit <ENV>")),
+        };
+
+        let blob = prep.env_blob_path(&name);
         if !blob.exists() {
             return Err(EnvrollError::EnvNotFound(format!(
-                "env \"{}\" not found",
-                args.name
+                "env \"{name}\" not found"
             )));
         }
         let pass = read_pass_and_verify(&prep, ctx)?;
@@ -42,17 +55,17 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         // directly (it IS the working copy). For everything else we ensure
         // the plaintext at .checkout/<name> is up to date.
         let is_active_copy_mode =
-            prep.manifest.active == args.name && matches!(prep.mode, Mode::Copy);
+            prep.manifest.active == name && matches!(prep.mode, Mode::Copy);
 
         let target: PathBuf = if is_active_copy_mode {
             prep.project_root.join(".env")
         } else {
             let plaintext =
                 crypto::decrypt(&std::fs::read(&blob).map_err(EnvrollError::Io)?, &pass)?;
-            write_checkout(&prep, &args.name, &plaintext)?;
+            write_checkout(&prep, &name, &plaintext)?;
             // Keep `prep` alive only as long as we need it; capture the path
             // by value before dropping.
-            let p = prep.checkout_path(&args.name);
+            let p = prep.checkout_path(&name);
             // Re-bind to a path with no ties to `prep`.
             let _ = &mut prep; // silence "unused mut" if compiler decides so
             p

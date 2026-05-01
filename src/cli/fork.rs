@@ -11,18 +11,19 @@
 use clap::Args as ClapArgs;
 
 use crate::cli::common::{
-    active_ref_pinned_message, create_env_from_path, iso_now_local, open_project,
-    read_pass_and_verify, LockMode,
+    active_ref_pinned_message, create_env_from_path, iso_now_local, missing_new_env_error,
+    open_project, read_pass_and_verify, LockMode,
 };
 use crate::cli::Context;
 use crate::errors::{generic, EnvrollError};
 use crate::parser;
-use crate::vault::Mode;
+use crate::vault::{sweep_historical_checkouts, Mode};
 
 #[derive(Debug, ClapArgs)]
 pub struct Args {
     /// Name of the new env to create.
-    pub name: String,
+    #[arg(value_name = "NAME")]
+    pub name: Option<String>,
 
     /// Commit message. Defaults vary by mode (`fork from <active> at <ts>`
     /// or `initial save of ./.env as <name>`).
@@ -37,6 +38,22 @@ pub struct Args {
 
 pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     let mut prep = open_project(ctx, LockMode::Exclusive)?;
+    let _ = sweep_historical_checkouts(
+        &prep.vault,
+        &prep.repo,
+        prep.project_id(),
+        &prep.project_root,
+    );
+
+    let name = match args.name {
+        Some(n) => n,
+        None => {
+            return Err(missing_new_env_error(
+                &prep,
+                "envroll fork <NAME> [-m <msg>]",
+            ));
+        }
+    };
 
     // Surface the active_ref pin pre-emptively for the active-env mode —
     // forking from a pinned env would silently rewind, same hazard as save.
@@ -76,14 +93,14 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
                     parser::parse_buf(&bytes)?;
                     create_env_from_path(
                         &mut prep,
-                        &args.name,
+                        &name,
                         &bytes,
                         &pass,
                         &msg,
                         args.message.as_deref(),
                         args.force,
                     )?;
-                    print_created(&args.name);
+                    print_created(&name);
                     return Ok(());
                 }
                 return Err(generic(
@@ -105,7 +122,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
                 let env_path = prep.project_root.join(".env");
                 let bytes = std::fs::read(&env_path).map_err(EnvrollError::Io)?;
                 parser::parse_buf(&bytes)?;
-                let msg = format!("initial save of ./.env as {}", args.name);
+                let msg = format!("initial save of ./.env as {name}");
                 (bytes, msg)
             }
             Mode::None => {
@@ -129,14 +146,14 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     let pass = read_pass_and_verify(&prep, ctx)?;
     create_env_from_path(
         &mut prep,
-        &args.name,
+        &name,
         &plaintext,
         &pass,
         &default_msg,
         args.message.as_deref(),
         args.force,
     )?;
-    print_created(&args.name);
+    print_created(&name);
     Ok(())
 }
 

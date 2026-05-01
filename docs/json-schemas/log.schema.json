@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "envroll log --format json",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["hash", "added", "removed", "changed", "message", "timestamp"],
+    "properties": {
+      "hash": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{12}$"
+      },
+      "added": { "type": "integer", "minimum": 0 },
+      "removed": { "type": "integer", "minimum": 0 },
+      "changed": { "type": "integer", "minimum": 0 },
+      "message": { "type": "string" },
+      "timestamp": { "type": "string", "format": "date-time" }
+    }
+  }
+}

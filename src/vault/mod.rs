@@ -16,6 +16,7 @@ pub mod git;
 
 use age::secrecy::SecretString;
 use std::path::{Component, Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use crate::crypto;
 use crate::errors::EnvrollError;
@@ -241,6 +242,134 @@ pub fn infer_mode(project_root: &Path, vault: &Vault, project_id: &str) -> Mode 
         // Directory or other unexpected type at `./.env`. Treat as foreign so
         // we refuse instead of clobbering.
         Mode::ForeignSymlink
+    }
+}
+
+/// Default TTL (in days) for historical-checkout files when neither
+/// `ENVROLL_HISTORICAL_TTL_DAYS` nor a config-file override is set.
+pub const DEFAULT_HISTORICAL_TTL_DAYS: u32 = 7;
+
+/// Read the configured TTL for historical checkouts, in days. Precedence:
+/// 1. `ENVROLL_HISTORICAL_TTL_DAYS` env var (any non-numeric value falls
+///    through to the default — silent ignore is safer here than refusing the
+///    whole command).
+/// 2. *(future: `<vault>/.config.toml` `historical_ttl_days = N`)*
+/// 3. [`DEFAULT_HISTORICAL_TTL_DAYS`].
+///
+/// A value of `0` disables sweeping entirely.
+pub fn historical_ttl_days(_vault_root: &Path) -> u32 {
+    if let Ok(raw) = std::env::var("ENVROLL_HISTORICAL_TTL_DAYS") {
+        if let Ok(n) = raw.trim().parse::<u32>() {
+            return n;
+        }
+    }
+    DEFAULT_HISTORICAL_TTL_DAYS
+}
+
+/// Sweep stale historical-checkout files (`<name>@<12hex>`) under one project
+/// per design.md D5 / env-switching spec.
+///
+/// Eligibility: file matches `<name>@<12 hex chars>` AND its mtime is older
+/// than the configured TTL AND no commit on `<name>`'s history starts with
+/// `<12 hex>` (i.e., the commit it pinned has been orphaned). The sweeper
+/// MUST NOT delete a file that is the live target of `./.env` for this
+/// project, even past TTL — checked via the optional `project_root`.
+///
+/// Returns the count of files removed. Errors are tolerated per-file (the
+/// sweeper is best-effort cleanup, not a critical path).
+///
+/// Callers should only invoke this from commands that already touch
+/// `.checkout/` (use, save, fork, set, copy, edit, rm, rename, status, diff,
+/// log). Read-only commands that don't (current, projects, list, get) MUST
+/// NOT call this — sweeping under a shared lock conflicts with design.md D15.
+pub fn sweep_historical_checkouts(
+    vault: &Vault,
+    repo: &git::VaultRepo,
+    project_id: &str,
+    project_root: &Path,
+) -> usize {
+    let ttl_days = historical_ttl_days(vault.root());
+    if ttl_days == 0 {
+        return 0;
+    }
+    let ttl = Duration::from_secs(u64::from(ttl_days) * 86_400);
+    let checkout_dir = project_checkout_dir(vault.root(), project_id);
+    let entries = match std::fs::read_dir(&checkout_dir) {
+        Ok(e) => e,
+        Err(_) => return 0,
+    };
+    let now = SystemTime::now();
+    let live_target = read_dotenv_target(project_root);
+
+    // Memoize per-env reachability so we never re-walk history for the same env.
+    let scope = repo.project(project_id);
+    let mut reachable_per_env: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+
+    let mut removed = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|s| s.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        let (env_name, hash_part) = match name.split_once('@') {
+            Some(parts) => parts,
+            None => continue,
+        };
+        if hash_part.len() != 12 || !hash_part.chars().all(|c| c.is_ascii_hexdigit()) {
+            continue;
+        }
+
+        // In-use guard: never delete the live target of ./.env.
+        if let Some(t) = live_target.as_ref() {
+            if lexically_normalize(t) == lexically_normalize(&path) {
+                continue;
+            }
+        }
+
+        let meta = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        let mtime = match meta.modified() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let aged = now.duration_since(mtime).map(|d| d >= ttl).unwrap_or(false);
+        if !aged {
+            continue;
+        }
+
+        let reachable = reachable_per_env
+            .entry(env_name.to_string())
+            .or_insert_with(|| {
+                scope
+                    .commit_history(env_name)
+                    .map(|oids| oids.iter().map(|o| o.to_string()).collect())
+                    .unwrap_or_default()
+            });
+        if reachable.iter().any(|oid| oid.starts_with(hash_part)) {
+            continue;
+        }
+
+        if std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
+/// Read `./.env`'s symlink target as an absolute path, if it exists and is a
+/// symlink. Returns `None` for regular files, missing files, or read errors.
+fn read_dotenv_target(project_root: &Path) -> Option<PathBuf> {
+    let env_path = project_root.join(".env");
+    let target = std::fs::read_link(&env_path).ok()?;
+    if target.is_absolute() {
+        Some(target)
+    } else {
+        let parent = env_path.parent()?;
+        Some(parent.join(target))
     }
 }
 
