@@ -13,6 +13,14 @@ A single statically-linked Rust binary that versions, switches, and encrypts env
 
 ---
 
+<p align="center">
+  <img src="docs/demo.gif" alt="envroll demo: init, fork, set, save, use, exec, diff, log, list" width="100%">
+</p>
+
+<p align="center"><sub>▶ <a href="docs/demo.mp4">Watch the MP4 version</a> (with pause/scrub controls).</sub></p>
+
+---
+
 ## What envroll does and does not protect against
 
 > **Read this first.** envroll is honest about its threat model. If your needs do not fit inside what envroll protects against, use a different tool.
