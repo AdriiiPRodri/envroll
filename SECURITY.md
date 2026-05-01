@@ -51,6 +51,57 @@ the source, this is the file to start with.
 | Logs | None on disk by default. With `--log debug` or `RUST_LOG=debug`, full anyhow chains go to stderr. envroll never writes its own log files. |
 | Telemetry | None. envroll makes no network call other than `git fetch`/`git push` to the user-configured `origin`. |
 
+## Demo mode (`ENVROLL_DEMO_MODE`)
+
+envroll ships with an undocumented-on-purpose presentation mode for
+recording screencasts and conference demos. It activates only when BOTH
+of these env vars are set:
+
+```text
+ENVROLL_DEMO_MODE=1
+ENVROLL_PASSPHRASE=<your demo vault's passphrase>
+```
+
+When active, the interactive `rpassword` prompt is replaced by a visible
+animation: the prompt label appears (`envroll passphrase:`), pauses
+briefly, then 8 bullet glyphs (`•`) type out one at a time. The
+passphrase actually used is `$ENVROLL_PASSPHRASE` — the bullets are
+purely cosmetic and the bytes printed are literally the `•` glyph.
+
+### What demo mode does NOT change
+
+- **Canary verification still runs.** The passphrase from
+  `$ENVROLL_PASSPHRASE` is still fed to the same `crypto::verify_canary`
+  path that every encrypted-content operation uses. A wrong passphrase
+  fails with `EnvrollError::WrongPassphrase` (exit 10) just like in
+  normal mode.
+- **No new logging surface.** The actual passphrase bytes never reach
+  the terminal, stdout, stderr, or any logger — only the `•` bullets
+  do.
+- **No new attack surface.** The animation reads from an env var, which
+  was already a supported (and documented) passphrase source. Demo mode
+  adds zero new code paths into the crypto / lock / vault layers.
+
+### When to NEVER use it
+
+- **In CI or production.** Demo mode requires `$ENVROLL_PASSPHRASE` to
+  be set, and a CI environment with that env var leaked into a process
+  group is exactly the failure mode envroll's threat model warns about.
+  CI should use `--passphrase-stdin` instead.
+- **On a real vault with secrets you care about.** Demo mode is for
+  scratch vaults whose passphrase you wouldn't mind leaking. Even
+  though demo mode adds no new exposure vector, treating it as a "test
+  fixture" reduces the chance of accidentally leaving the env vars set
+  in your shell session and then doing something real.
+
+### Why it lives in the production binary
+
+Keeping demo mode in `main` instead of a fork means demos exercise the
+same passphrase code path that real users hit, modulo the prompt
+animation. A fork would drift over time and quietly stop being
+representative. The full implementation is in `src/prompt.rs` — search
+for `DEMO_MODE_ENV`.
+
 ## Reporting a vulnerability
 
 If you believe you've found a security issue in envroll — anything that
