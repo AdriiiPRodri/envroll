@@ -1,6 +1,6 @@
 //! `envroll projects` — list every envroll project on this machine (lock-free).
 //!
-//! Lock-free per design.md D15: every manifest write is tempfile+rename, so
+//! Lock-free: every manifest write is tempfile+rename, so
 //! reads can never observe a torn file. Worst case we miss a project that
 //! was just registered — which the user can re-run to see.
 
@@ -9,11 +9,15 @@ use std::path::Path;
 
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use tabled::{
+    settings::{object::Columns, Alignment, Modify, Style},
+    Table, Tabled,
+};
 
 use crate::cli::Context;
 use crate::errors::EnvrollError;
 use crate::manifest::{IdSource, Manifest};
-use crate::output::{style_active, styled, use_color, OutputFormat};
+use crate::output::OutputFormat;
 use crate::paths::{project_envs_dir, projects_dir, resolve_vault_root};
 
 #[derive(Debug, ClapArgs)]
@@ -109,67 +113,45 @@ fn count_envs(envs_dir: &Path) -> usize {
         .count()
 }
 
-fn print_human(rows: &[ProjectRow], color: bool) {
+/// View struct that controls how each row renders in the human table. Lives
+/// next to the printer (and not on `ProjectRow`) so the JSON shape stays
+/// completely independent of the table headers.
+#[derive(Tabled)]
+struct ProjectTableRow {
+    #[tabled(rename = "ID")]
+    id: String,
+    #[tabled(rename = "ENVS")]
+    envs: usize,
+    #[tabled(rename = "ACTIVE")]
+    active: String,
+    #[tabled(rename = "SOURCE")]
+    source: &'static str,
+    #[tabled(rename = "CREATED")]
+    created: String,
+}
+
+fn print_human(rows: &[ProjectRow], _color: bool) {
     if rows.is_empty() {
         println!("no projects registered");
         return;
     }
-    let use_color_now = use_color(!color);
-    let id_w = rows.iter().map(|r| r.id.len()).max().unwrap_or(2).max(2);
-    let envs_w = 4usize;
-    let active_w = rows
+    let view: Vec<ProjectTableRow> = rows
         .iter()
-        .map(|r| r.active.as_deref().unwrap_or("-").len())
-        .max()
-        .unwrap_or(6)
-        .max(6);
-    let source_w = rows
-        .iter()
-        .map(|r| id_source_str(r.id_source).len())
-        .max()
-        .unwrap_or(6)
-        .max(6);
-
-    println!(
-        "{:<id_w$}  {:>envs_w$}  {:<active_w$}  {:<source_w$}  CREATED",
-        "ID",
-        "ENVS",
-        "ACTIVE",
-        "SOURCE",
-        id_w = id_w,
-        envs_w = envs_w,
-        active_w = active_w,
-        source_w = source_w,
-    );
-    for r in rows {
-        let active_label = r.active.as_deref().unwrap_or("-");
-        // Pad the raw label first, then wrap only the label portion in ANSI
-        // codes — Rust's `{:<N}` formatter counts bytes, and a styled string
-        // is ~12 bytes longer than its visible width, so styling-then-padding
-        // collapses the column when the active name is shorter than the
-        // header.
-        let trailing = active_w.saturating_sub(active_label.len());
-        let active_cell = if r.active.is_some() {
-            format!(
-                "{}{}",
-                styled(use_color_now, style_active(), active_label),
-                " ".repeat(trailing)
-            )
-        } else {
-            format!("{:<active_w$}", active_label, active_w = active_w)
-        };
-        println!(
-            "{:<id_w$}  {:>envs_w$}  {}  {:<source_w$}  {}",
-            r.id,
-            r.envs,
-            active_cell,
-            id_source_str(r.id_source),
-            r.created_at.to_rfc3339(),
-            id_w = id_w,
-            envs_w = envs_w,
-            source_w = source_w,
-        );
-    }
+        .map(|r| ProjectTableRow {
+            id: r.id.clone(),
+            envs: r.envs,
+            active: r.active.clone().unwrap_or_else(|| "-".to_string()),
+            source: id_source_str(r.id_source),
+            // Trim sub-second precision and the offset suffix so the column
+            // stays narrow without losing useful info.
+            created: r.created_at.format("%Y-%m-%d %H:%M:%S").to_string(),
+        })
+        .collect();
+    let mut table = Table::new(view);
+    table
+        .with(Style::rounded())
+        .with(Modify::new(Columns::one(1)).with(Alignment::right()));
+    println!("{table}");
 }
 
 fn print_json(rows: &[ProjectRow]) -> Result<(), EnvrollError> {

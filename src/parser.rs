@@ -1,5 +1,5 @@
 //! `.env` file parsing and the canonical "nothing to save" comparator
-//! (design.md D4).
+//!.
 //!
 //! envroll does NOT roll its own `.env` parser — we delegate to `dotenvy`
 //! and only own:
@@ -9,7 +9,7 @@
 //!   Unparseable input maps to [`EnvrollError::ParseError`].
 //! - [`as_key_value_map`]: collapse to a `BTreeMap` with later-wins semantics.
 //!   This is the canonical "set" used by the comparator.
-//! - [`same_kv_set`]: comparator per design.md D4 — order-insensitive,
+//! - [`same_kv_set`]: comparator — order-insensitive,
 //!   value byte-exact, comments / blank lines / trailing-newline differences
 //!   ignored, inner-value whitespace IS significant.
 //! - [`serialize`]: re-emit a `.env` file. Pre-existing keys keep their
@@ -49,7 +49,7 @@ fn parse_reader<R: Read>(reader: R) -> Result<Vec<(String, String)>, EnvrollErro
 
 /// Collapse a parsed sequence to a canonical key→value map. Later assignments
 /// of the same key overwrite earlier ones (matches `dotenvy`'s runtime
-/// behavior and design.md D4).
+/// behavior).
 pub fn as_key_value_map(parsed: &[(String, String)]) -> BTreeMap<String, String> {
     let mut map = BTreeMap::new();
     for (k, v) in parsed {
@@ -61,11 +61,11 @@ pub fn as_key_value_map(parsed: &[(String, String)]) -> BTreeMap<String, String>
 /// Are these two parsed-and-collapsed key-value sets equivalent for the
 /// purpose of "nothing to save" detection?
 ///
-/// Per design.md D4: this is equality on the [`BTreeMap`] view. Key order,
-/// comments, blank lines, and trailing-newline differences are already
-/// invisible at this layer (they were stripped in parsing). Inner-value
-/// whitespace differences ARE preserved as part of the value bytes, so a
-/// changed value with the same trim() still counts as a change.
+/// This is equality on the [`BTreeMap`] view. Key order, comments, blank
+/// lines, and trailing-newline differences are already invisible at this
+/// layer (they were stripped in parsing). Inner-value whitespace differences
+/// ARE preserved as part of the value bytes, so a changed value with the
+/// same trim() still counts as a change.
 pub fn same_kv_set(a: &BTreeMap<String, String>, b: &BTreeMap<String, String>) -> bool {
     a == b
 }
@@ -82,9 +82,9 @@ pub fn same_kv_set(a: &BTreeMap<String, String>, b: &BTreeMap<String, String>) -
 ///   and round-trips through [`parse_buf`] cleanly.
 ///
 /// This function does NOT preserve comments or blank lines from the original
-/// input — envroll commits the canonical key-value content, and design.md D4
-/// classifies comment-only edits as "nothing to save". Callers that want to
-/// preserve comments verbatim should use `envroll edit`.
+/// input — envroll commits the canonical key-value content, and comment-only
+/// edits classify as "nothing to save". Callers that want to preserve
+/// comments verbatim should use `envroll edit`.
 pub fn serialize(parsed: &[(String, String)], updates: &[(String, String)]) -> String {
     let mut effective: BTreeMap<String, String> = as_key_value_map(parsed);
     for (k, v) in updates {

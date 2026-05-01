@@ -2,7 +2,7 @@
 //!
 //! Decrypts to memory only; no plaintext touches disk. The vault's shared
 //! lock is released before `cmd` is spawned (the child can run for hours;
-//! same reasoning as `edit` per design.md D15).
+//! same reasoning as `edit`).
 
 use std::collections::BTreeMap;
 
@@ -13,7 +13,7 @@ use crate::cli::common::{
 };
 use crate::cli::Context;
 use crate::crypto;
-use crate::errors::{generic, EnvrollError};
+use crate::errors::{generic, usage, EnvrollError};
 use crate::parser;
 use crate::vault::git::RefForm;
 
@@ -49,8 +49,9 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
             }
         };
         if args.cmd.is_empty() {
-            return Err(generic(
-                "no command given.\nusage: envroll exec <REF> -- <cmd> [args...]",
+            return Err(usage(
+                "no command given",
+                Some("usage: envroll exec <REF> -- <cmd> [args...]".to_string()),
             ));
         }
         let (env_name, ref_form) = parse_ref(&reference)?;

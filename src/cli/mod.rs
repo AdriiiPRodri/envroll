@@ -52,9 +52,9 @@ pub enum LogLevel {
 
 /// Top-level CLI: global flags + a required subcommand.
 ///
-/// Global flags map 1:1 to design.md D16. `--vault <path>` is intentionally
-/// undocumented in user-facing help (it is a testing escape hatch) but lives
-/// here because every subcommand needs it.
+/// `--vault <path>` is intentionally undocumented in user-facing help
+/// (it is a testing escape hatch) but lives here because every subcommand
+/// needs it.
 #[derive(Debug, Parser)]
 #[command(
     name = "envroll",
@@ -95,7 +95,7 @@ pub struct Cli {
 
     /// Override the vault root directory. Testing escape hatch — not
     /// documented in the user-facing README. Multi-vault topologies are
-    /// explicitly unsupported (design.md D16).
+    /// explicitly unsupported.
     #[arg(long, value_name = "PATH", global = true, hide = true)]
     pub vault: Option<PathBuf>,
 

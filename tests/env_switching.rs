@@ -1,5 +1,5 @@
 //! Integration tests for sections 10 (switching), 11 (versioning), 12
-//! (variable ops), and 13 (exec) of tasks.md.
+//! (variable ops), and 13 (exec).
 //!
 //! Same sandbox shape as `tests/env_management.rs`: tempdir cwd + tempdir
 //! XDG_DATA_HOME + ENVROLL_PASSPHRASE.
@@ -287,7 +287,10 @@ fn status_clean_symlink_mode() {
 }
 
 #[test]
-fn status_dirty_with_added_and_changed_keys_mask_by_default() {
+fn status_dirty_with_added_and_changed_keys_shows_values_by_default() {
+    // Default flipped on 2026-05-01: values are visible by default since the
+    // user is on their own machine looking at their own envs. `--mask` is
+    // the opt-in for paste-safe output (see `status_mask_hides_values`).
     let (cwd, xdg) = sandbox();
     init(cwd.path(), xdg.path(), "p");
     std::fs::write(cwd.path().join(".env"), b"A=1\nB=2\n").unwrap();
@@ -305,7 +308,26 @@ fn status_dirty_with_added_and_changed_keys_mask_by_default() {
         .stdout(predicate::str::contains("+C"))
         .stdout(predicate::str::contains("-B"))
         .stdout(predicate::str::contains("~A"))
-        .stdout(predicate::str::contains("********"));
+        .stdout(predicate::str::contains("new"))
+        .stdout(predicate::str::contains("999"));
+}
+
+#[test]
+fn status_mask_hides_values() {
+    let (cwd, xdg) = sandbox();
+    init(cwd.path(), xdg.path(), "p");
+    std::fs::write(cwd.path().join(".env"), b"A=1\n").unwrap();
+    fork(cwd.path(), xdg.path(), "p", "dev");
+
+    let proj = project_dir(xdg.path());
+    std::fs::write(proj.join(".checkout/dev"), b"A=secret\n").unwrap();
+
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["status", "--mask"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("********"))
+        .stdout(predicate::str::contains("secret").not());
 }
 
 #[test]
@@ -349,13 +371,24 @@ fn log_lists_history_newest_first_with_summary() {
         .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8(out.stdout).unwrap();
-    // One header line + two entries, newest first; the v2 entry is +1 (added B),
-    // v1 is +1 (initial A).
-    let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 3, "expected 1 header + 2 entries, got {stdout:?}");
-    assert!(lines[0].contains("HASH") && lines[0].contains("CHANGES"));
-    assert!(lines[1].contains("+1"));
-    assert!(lines[1].contains("v2"));
+    // The tabled output is a Unicode-bordered table: top border, header row,
+    // separator, two data rows, bottom border. We just check the spec-mandated
+    // bits show up: the column headers, both entries, and the v2 message.
+    assert!(stdout.contains("HASH"), "missing HASH header: {stdout}");
+    assert!(
+        stdout.contains("CHANGES"),
+        "missing CHANGES header: {stdout}"
+    );
+    assert!(
+        stdout.contains("MESSAGE"),
+        "missing MESSAGE header: {stdout}"
+    );
+    assert!(stdout.contains("+1"), "missing +1 summary: {stdout}");
+    assert!(stdout.contains("v2"), "missing v2 message: {stdout}");
+    assert!(
+        stdout.contains("initial save"),
+        "missing v1 message: {stdout}"
+    );
 }
 
 #[test]
@@ -374,9 +407,11 @@ fn diff_between_two_envs_reports_changes() {
         .unwrap();
     assert!(out.status.success());
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(stdout.contains("+C"));
-    assert!(stdout.contains("-B"));
-    assert!(stdout.contains("~A"));
+    // The new tabled output shows op + key in separate cells, so look for
+    // each (op, key) pair as adjacent table cells.
+    assert!(stdout.contains("+") && stdout.contains(" C "));
+    assert!(stdout.contains("-") && stdout.contains(" B "));
+    assert!(stdout.contains("~") && stdout.contains(" A "));
 }
 
 // ------------------------------------------------------------------

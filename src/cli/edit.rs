@@ -1,9 +1,9 @@
 //! `envroll edit <name>` — open an env in `$EDITOR` with no lock held.
 //!
-//! Per design.md D19, the vault lock is held only during the prepare phase
-//! (verify canary + ensure plaintext checkout exists + print save hint). The
-//! editor itself runs UNLOCKED — its lifetime is unbounded and holding the
-//! exclusive lock for it would block every other vault command.
+//! The vault lock is held only during the prepare phase (verify canary +
+//! ensure plaintext checkout exists + print save hint). The editor itself
+//! runs UNLOCKED — its lifetime is unbounded and holding the exclusive lock
+//! for it would block every other vault command.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -54,8 +54,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         // Decrypt-on-demand: in copy-mode for the active env we open ./.env
         // directly (it IS the working copy). For everything else we ensure
         // the plaintext at .checkout/<name> is up to date.
-        let is_active_copy_mode =
-            prep.manifest.active == name && matches!(prep.mode, Mode::Copy);
+        let is_active_copy_mode = prep.manifest.active == name && matches!(prep.mode, Mode::Copy);
 
         let target: PathBuf = if is_active_copy_mode {
             prep.project_root.join(".env")

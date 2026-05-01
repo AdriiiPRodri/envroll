@@ -91,7 +91,7 @@ fn init_on_fresh_machine_creates_vault_and_registers_project() {
     assert!(manifest_raw.contains("active = \"\""));
     assert!(manifest_raw.contains("active_ref = \"\""));
     assert!(manifest_raw.contains("created_at = "));
-    // The forbidden machine-local fields (design.md D2/D9):
+    // The forbidden machine-local fields:
     assert!(!manifest_raw.contains("path = "));
     assert!(!manifest_raw.contains("mode = "));
     assert!(!manifest_raw.contains("copy_hash = "));

@@ -1,4 +1,4 @@
-//! Output formatting and color handling (design.md D16).
+//! Output formatting and color handling.
 //!
 //! Two output modes: `human` (default, colorized when stdout is a TTY) and
 //! `json` (stable schema, no color, never includes ANSI codes). Color is

@@ -5,12 +5,13 @@
 //!
 //! Walks libgit2 history for commits touching `envs/<name>.age`, then for
 //! each adjacent pair decrypts both blobs and computes a `+N -M ~K` summary.
-//! Acquires a shared lock per design.md D15.
+//! Acquires a shared lock.
 
 use std::collections::BTreeSet;
 
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use tabled::{settings::Style, Table, Tabled};
 
 use crate::cli::common::{
     missing_existing_env_error, open_project, read_pass_and_verify, short_oid_12, LockMode,
@@ -129,47 +130,37 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     Ok(())
 }
 
-/// Render the log entries as an aligned table with column headers.
-///
-/// Layout: `HASH  CHANGES   TIMESTAMP            MESSAGE`. The `CHANGES`
-/// column packs `+N -M ~K` into a fixed width so the timestamp and message
-/// always start at the same column even when the counts vary by digit count.
+/// View struct that controls how each commit renders in the log table.
+/// Lives next to the printer so the JSON shape (`Entry`) stays independent
+/// of the column headers and formatting.
+#[derive(Tabled)]
+struct LogTableRow {
+    #[tabled(rename = "HASH")]
+    hash: String,
+    #[tabled(rename = "CHANGES")]
+    changes: String,
+    #[tabled(rename = "TIMESTAMP")]
+    timestamp: String,
+    #[tabled(rename = "MESSAGE")]
+    message: String,
+}
+
 fn print_human(entries: &[Entry]) {
     if entries.is_empty() {
         return;
     }
-    // Hash is fixed at 12 hex chars; the columns we still need to size are
-    // the change-summary (max width across all entries) and the timestamp
-    // (constant 20 chars for `YYYY-MM-DDTHH:MM:SSZ`).
-    let change_strings: Vec<String> = entries
+    let view: Vec<LogTableRow> = entries
         .iter()
-        .map(|e| format!("+{} -{} ~{}", e.added, e.removed, e.changed))
+        .map(|e| LogTableRow {
+            hash: e.hash.clone(),
+            changes: format!("+{} -{} ~{}", e.added, e.removed, e.changed),
+            timestamp: e.timestamp.clone(),
+            message: e.message.clone(),
+        })
         .collect();
-    let change_w = change_strings.iter().map(String::len).max().unwrap_or(7).max(7);
-    let hash_w = 12;
-    let ts_w = 20;
-
-    println!(
-        "{:<hash_w$}  {:<change_w$}  {:<ts_w$}  MESSAGE",
-        "HASH",
-        "CHANGES",
-        "TIMESTAMP",
-        hash_w = hash_w,
-        change_w = change_w,
-        ts_w = ts_w,
-    );
-    for (e, changes) in entries.iter().zip(change_strings.iter()) {
-        println!(
-            "{:<hash_w$}  {:<change_w$}  {:<ts_w$}  {}",
-            e.hash,
-            changes,
-            e.timestamp,
-            e.message,
-            hash_w = hash_w,
-            change_w = change_w,
-            ts_w = ts_w,
-        );
-    }
+    let mut table = Table::new(view);
+    table.with(Style::rounded());
+    println!("{table}");
 }
 
 fn read_blob_at(

@@ -1,7 +1,7 @@
 //! `envroll save` — save the working copy to the active env.
 //!
 //! Note: there is NO `save <name>` form. `fork <name>` is the canonical
-//! creation verb (design.md D6). A positional name argument is rejected
+//! creation verb. A positional name argument is rejected
 //! at parse time by clap.
 
 use clap::Args as ClapArgs;
@@ -24,7 +24,7 @@ pub struct Args {
 
     /// When the active env is pinned to a historical ref (`active_ref` set),
     /// `save` refuses by default. `--force` deliberately rewinds to a new
-    /// tip from the historical content (design.md D18).
+    /// tip from the historical content.
     #[arg(long)]
     pub force: bool,
 }
@@ -44,7 +44,8 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         ));
     }
 
-    // active_ref refuse rule (design.md D18 / env-management spec).
+    // active_ref refuse rule: writing to a historically-pinned env would
+    // silently rewind it, so we refuse unless --force is passed.
     if !prep.manifest.active_ref.is_empty() && !args.force {
         let hash = parse_active_ref_hash(&prep.manifest.active_ref)
             .unwrap_or(prep.manifest.active_ref.as_str());

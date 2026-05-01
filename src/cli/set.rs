@@ -1,8 +1,8 @@
 //! `envroll set <KEY=value>` — set or update a single key.
 //!
-//! Acquires the exclusive lock. Refuses with the same `active_ref` message as
-//! `envroll save` if the target env is the active one AND `active_ref` is
-//! pinned (design.md D18 / variable-ops spec).
+//! Acquires the exclusive lock. Refuses with the same `active_ref` message
+//! as `envroll save` if the target env is the active one AND `active_ref`
+//! is pinned (writing would silently rewind the env).
 
 use clap::Args as ClapArgs;
 
@@ -12,7 +12,7 @@ use crate::cli::common::{
 };
 use crate::cli::Context;
 use crate::crypto;
-use crate::errors::{generic, EnvrollError};
+use crate::errors::{generic, usage, EnvrollError};
 use crate::parser;
 use crate::vault::sweep_historical_checkouts;
 
@@ -42,9 +42,9 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         Some(n) => n.to_string(),
         None => {
             if prep.manifest.active.is_empty() {
-                return Err(EnvrollError::EnvNotFound(
-                    "no active env, and --in <ENV> was not given.\nusage: envroll set <KEY=value> [--in <ENV>]"
-                        .to_string(),
+                return Err(usage(
+                    "no active env, and --in <ENV> was not given",
+                    Some("usage: envroll set <KEY=value> [--in <ENV>]".to_string()),
                 ));
             }
             prep.manifest.active.clone()
@@ -59,10 +59,12 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
             } else {
                 format!("active env \"{env_name}\"")
             };
-            return Err(generic(format!(
-                "no assignment given. Would write to {target}.\n\
-                 usage: envroll set <KEY=value> [--in <ENV>]"
-            )));
+            return Err(usage(
+                "no assignment given",
+                Some(format!(
+                    "Would write to {target}.\nusage: envroll set <KEY=value> [--in <ENV>]"
+                )),
+            ));
         }
     };
 
@@ -70,9 +72,10 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     let (key, value) = match assignment.split_once('=') {
         Some((k, v)) if !k.is_empty() => (k.to_string(), v.to_string()),
         _ => {
-            return Err(generic(format!(
-                "invalid assignment \"{assignment}\": expected KEY=value (e.g. `envroll set DEBUG=true`)"
-            )));
+            return Err(usage(
+                format!("invalid assignment \"{assignment}\""),
+                Some("Expected KEY=value (e.g. `envroll set DEBUG=true`).".to_string()),
+            ));
         }
     };
 

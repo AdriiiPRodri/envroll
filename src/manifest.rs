@@ -1,14 +1,14 @@
 //! Project manifest (`<vault>/projects/<id>/manifest.toml`) and project-ID
-//! derivation (design.md D1, D2).
+//! derivation.
 //!
 //! The manifest holds ONLY project-level state that travels across machines
-//! via vault sync. Three things explicitly NOT in here, per design.md D2/D9:
+//! via vault sync. Three things explicitly NOT in here:
 //! - `path` — re-derived from `cwd` at every command,
 //! - `mode` — inferred at runtime from the on-disk type of `./.env`,
 //! - `copy_hash` — replaced by parse-then-compare against `.checkout/<name>`.
 //!
-//! Project-ID derivation (D1): `--id` override → normalized `git remote
-//! get-url origin` SHA-256 prefix → canonicalized abs-path SHA-256 prefix.
+//! Project-ID derivation: `--id` override → normalized `git remote get-url
+//! origin` SHA-256 prefix → canonicalized abs-path SHA-256 prefix.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -35,8 +35,7 @@ pub enum IdSource {
 
 /// On-disk schema for `<vault>/projects/<id>/manifest.toml`.
 ///
-/// Field order matters for deterministic output via `toml::to_string` —
-/// keep in sync with the table in design.md D2.
+/// Field order matters for deterministic output via `toml::to_string`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
     pub schema_version: u32,
@@ -51,7 +50,7 @@ pub struct Manifest {
     #[serde(default)]
     pub active: String,
     /// Set to `<name>@<short-hash>` only when pinned to a historical ref
-    /// via `envroll use <name>@<...>` (design.md D18). Empty otherwise.
+    /// via `envroll use <name>@<...>`. Empty otherwise.
     #[serde(default)]
     pub active_ref: String,
     pub created_at: DateTime<Utc>,
@@ -109,7 +108,7 @@ pub enum IdDerivation {
     Remote { id: String, normalized_url: String },
     /// Derived from the canonicalized absolute path of the project root.
     /// `id_input` is empty for path-derived projects (the path is
-    /// machine-local and is NOT persisted, design.md D2/D9).
+    /// machine-local and is NOT persisted).
     Path { id: String },
 }
 
@@ -140,7 +139,7 @@ impl IdDerivation {
     }
 }
 
-/// Derive a project ID for `cwd` per design.md D1.
+/// Derive a project ID for `cwd`.
 ///
 /// Order of precedence:
 /// 1. `override_id` (from `--id`).
@@ -183,7 +182,7 @@ fn try_get_origin_url(cwd: &Path) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Canonicalize an origin URL per design.md D1. The two SSH/HTTPS forms of
+/// Canonicalize an origin URL. The two SSH/HTTPS forms of
 /// the same project MUST normalize to the same string; otherwise the same
 /// project would get two different IDs depending on which protocol the user's
 /// `origin` was configured with.
@@ -248,7 +247,7 @@ fn short_hash16(input: &[u8]) -> String {
     out
 }
 
-/// Locate the project this `cwd` belongs to (design.md D1, task 7.3).
+/// Locate the project this `cwd` belongs to.
 ///
 /// 1. Re-derive the ID from `cwd` via [`derive_project_id`] (no override).
 /// 2. Load `<vault>/projects/<id>/manifest.toml`.

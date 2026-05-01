@@ -1,7 +1,7 @@
 //! Vault path resolution.
 //!
 //! Precedence for the vault root, highest first:
-//! 1. The `--vault <path>` global CLI flag (testing escape hatch, design.md D16).
+//! 1. The `--vault <path>` global CLI flag (testing escape hatch).
 //! 2. The `XDG_DATA_HOME` environment variable (`<XDG_DATA_HOME>/envroll`).
 //! 3. On Unix (macOS + Linux): `$HOME/.local/share/envroll`.
 //!    On Windows: the platform default via `directories::ProjectDirs`.
@@ -22,7 +22,7 @@ use crate::errors::{generic, EnvrollError};
 ///
 /// `cli_vault_override` is the value of `--vault` (None if the flag was
 /// not passed). The function does not create the directory — that is
-/// `Vault::ensure_init`'s job (section 3 of tasks.md).
+/// `Vault::ensure_init`'s job .
 pub fn resolve_vault_root(cli_vault_override: Option<&Path>) -> Result<PathBuf, EnvrollError> {
     if let Some(p) = cli_vault_override {
         return Ok(p.to_path_buf());
@@ -119,7 +119,7 @@ pub fn project_checkout_at(
 }
 
 /// Build a tempfile name in the same directory as `dest`, using the documented
-/// pattern from design.md D8: `.<filename>.envroll-tmp.<pid>.<rand6>`.
+/// pattern: `.<filename>.envroll-tmp.<pid>.<rand6>`.
 ///
 /// The `<rand6>` segment is six lowercase hex chars derived from the supplied
 /// randomness. Callers pass `random_hex` so this function stays pure and
@@ -154,7 +154,7 @@ pub fn rand_hex6() -> String {
     format!("{:06x}", mixed & 0x00FF_FFFF)
 }
 
-/// Regex pattern for tempfile detection (design.md D8). Used by the orphan
+/// Regex pattern for tempfile detection. Used by the orphan
 /// sweeper. Exposed as a constant string so the regex crate need not be
 /// pulled in for a single-purpose match — the sweeper uses simple parsing.
 pub const TEMPFILE_PREFIX_INFIX: &str = ".envroll-tmp.";

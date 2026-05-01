@@ -1,6 +1,6 @@
 //! `envroll list` (alias `ls`) — list envs in the current project.
 //!
-//! Acquires a shared lock per design.md D15. With `--all` it reads every
+//! Acquires a shared lock. With `--all` it reads every
 //! registered project's manifest and groups by project; the per-project
 //! variant uses [`open_project`] which does the cwd lookup.
 

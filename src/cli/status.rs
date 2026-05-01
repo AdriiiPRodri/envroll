@@ -1,7 +1,7 @@
 //! `envroll status` — runtime mode, dirty state, pinned ref of the active env.
 //!
-//! Shared lock per design.md D15. The reported mode is derived at runtime
-//! (design.md D9) — never persisted.
+//! Shared lock. The reported mode is derived at runtime
+//! — never persisted.
 
 use std::collections::BTreeSet;
 
@@ -18,9 +18,16 @@ use crate::vault::{sweep_historical_checkouts, Mode};
 
 #[derive(Debug, ClapArgs)]
 pub struct Args {
-    /// Print actual values instead of `***` masks. Off by default — `status`
-    /// output is meant to be paste-safe in screenshots and tickets.
+    /// Mask values with `********` instead of printing them. Off by default —
+    /// you're on your own machine looking at your own envs. Enable this when
+    /// you're about to paste the output into a screenshot, ticket, or chat.
     #[arg(long)]
+    pub mask: bool,
+
+    /// Deprecated alias for the inverse of `--mask`. Kept so the spec's
+    /// original `--show-values` invocation still works; new scripts should
+    /// just stop passing it (showing values is the default now).
+    #[arg(long, hide = true)]
     pub show_values: bool,
 }
 
@@ -121,14 +128,17 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
             if let Some(ref pinned) = active_ref_opt {
                 println!("pinned to historical ref: {pinned} (run `envroll save` will be refused — see envroll save --help)");
             }
+            // Default: show values. `--mask` opts into masking; the legacy
+            // `--show-values` is honoured to keep old scripts working.
+            let show = !args.mask || args.show_values;
             for KeyVal { key, value } in &added {
-                println!("+{key} {}", display_value(value, args.show_values));
+                println!("+{key} {}", display_value(value, show));
             }
             for k in &removed {
                 println!("-{k}");
             }
             for KeyVal { key, value } in &changed {
-                println!("~{key} {}", display_value(value, args.show_values));
+                println!("~{key} {}", display_value(value, show));
             }
         }
         OutputFormat::Json => {

@@ -6,7 +6,7 @@ use crate::cli::common::{
     activate_dotenv, missing_existing_env_error, open_project, parse_active_ref_hash, LockMode,
 };
 use crate::cli::Context;
-use crate::errors::{generic, EnvrollError};
+use crate::errors::{usage, EnvrollError};
 use crate::vault::fs as vfs;
 use crate::vault::sweep_historical_checkouts;
 
@@ -44,8 +44,9 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
             ));
         }
         (Some(_), None) => {
-            return Err(generic(
-                "missing new env name.\nusage: envroll rename <OLD> <NEW>",
+            return Err(usage(
+                "missing new env name",
+                Some("usage: envroll rename <OLD> <NEW>".to_string()),
             ));
         }
     };

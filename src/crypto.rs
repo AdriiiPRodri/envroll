@@ -1,5 +1,5 @@
 //! Encryption layer: age scrypt-passphrase mode, binary on-disk format
-//! (design.md D7).
+//!.
 //!
 //! - [`encrypt`] / [`decrypt`] are thin wrappers over `age::simple::encrypt`
 //!   / `age::simple::decrypt` with a [`scrypt::Recipient`] / [`scrypt::Identity`].
@@ -25,7 +25,7 @@ use crate::vault::fs as vfs;
 /// schema bump (`<vault>/.envroll-version`).
 const CANARY_PLAINTEXT: &[u8] = b"envroll-canary-v1\n";
 
-/// Permission bits for `.age` blobs (0600, design.md D8 — defense in depth).
+/// Permission bits for `.age` blobs (0600 — defense in depth).
 const AGE_BLOB_MODE: u32 = 0o600;
 
 /// Encrypt `plaintext` with `passphrase` using age scrypt mode, binary format.
@@ -52,7 +52,7 @@ pub fn decrypt(ciphertext: &[u8], passphrase: &SecretString) -> Result<Vec<u8>, 
 }
 
 /// Create `<vault>/.canary.age` containing the fixed plaintext encrypted with
-/// `passphrase`. Mode 0600 (design.md D8). The vault git commit is the
+/// `passphrase`. Mode 0600. The vault git commit is the
 /// caller's responsibility (Vault::ensure_init handles it).
 pub fn create_canary(vault_root: &Path, passphrase: &SecretString) -> Result<(), EnvrollError> {
     let ciphertext = encrypt(CANARY_PLAINTEXT, passphrase)?;

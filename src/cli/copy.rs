@@ -2,7 +2,7 @@
 //!
 //! Refuses if `a == b` (exit 2 / generic message), if the key is absent in
 //! `<a>` (exit 20), and (when `<b>` is the active env AND `active_ref` is
-//! pinned) with the same message as `envroll save` (design.md D18).
+//! pinned) with the same message as `envroll save`.
 
 use clap::Args as ClapArgs;
 
@@ -12,7 +12,7 @@ use crate::cli::common::{
 };
 use crate::cli::Context;
 use crate::crypto;
-use crate::errors::{generic, EnvrollError};
+use crate::errors::{generic, usage, EnvrollError};
 use crate::parser;
 use crate::vault::sweep_historical_checkouts;
 
@@ -63,9 +63,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         )));
     }
     if !prep.env_blob_path(&to).exists() {
-        return Err(EnvrollError::EnvNotFound(format!(
-            "env \"{to}\" not found"
-        )));
+        return Err(EnvrollError::EnvNotFound(format!("env \"{to}\" not found")));
     }
 
     if to == prep.manifest.active && !prep.manifest.active_ref.is_empty() {
@@ -119,7 +117,8 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
 
 /// Build a usage error for `copy` that lists the available envs alongside the
 /// canonical invocation, so the user knows what to pass to `--from` / `--to`
-/// without leaving the shell.
+/// without leaving the shell. Returned as [`EnvrollError::Usage`] so miette
+/// renders the lead and the help body separately.
 fn usage_error(prep: &crate::cli::common::PreparedProject, lead: &str) -> EnvrollError {
     let names = list_env_names(prep);
     let envs_line = if names.is_empty() {
@@ -127,7 +126,10 @@ fn usage_error(prep: &crate::cli::common::PreparedProject, lead: &str) -> Envrol
     } else {
         format!("Envs in this project: {}", names.join(", "))
     };
-    generic(format!(
-        "{lead}.\nusage: envroll copy <KEY> --from <ENV> --to <ENV>\n{envs_line}"
-    ))
+    usage(
+        lead,
+        Some(format!(
+            "usage: envroll copy <KEY> --from <ENV> --to <ENV>\n{envs_line}"
+        )),
+    )
 }

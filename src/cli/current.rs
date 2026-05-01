@@ -1,8 +1,7 @@
 //! `envroll current` — print the active env name (lock-free, manifest-only).
 //!
-//! Per design.md D15, this command takes NO vault lock — it only reads
-//! `manifest.toml`, which is always written via tempfile+rename so a torn
-//! read is impossible.
+//! This command takes NO vault lock — it only reads `manifest.toml`, which
+//! is always written via tempfile+rename, so a torn read is impossible.
 
 use clap::Args as ClapArgs;
 

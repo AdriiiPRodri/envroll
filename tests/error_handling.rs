@@ -73,14 +73,17 @@ fn help_text_lists_supported_subcommands() {
 }
 
 #[test]
-fn structured_error_uses_envroll_category_message_format() {
+fn structured_error_renders_through_miette() {
+    // Errors now go through miette::Report which prints `× <message>` and an
+    // optional `help: ...` block — no leading `envroll:` prefix any more
+    // (the "envroll: <category>: <message>" line was the pre-miette format,
+    // dropped on 2026-05-01 in favor of the boxed diagnostic look).
     let (cwd, xdg) = sandbox();
     envroll_in(cwd.path(), xdg.path(), "p")
         .arg("current")
         .assert()
         .failure()
-        // No project + no vault yet → first failure is the vault-not-init message.
-        .stderr(predicate::str::starts_with("envroll:"));
+        .stderr(predicate::str::contains("×"));
 }
 
 // ---------- 15.5 — current/projects do NOT take the lock ----------
@@ -107,7 +110,7 @@ fn projects_does_not_block_on_held_exclusive_lock() {
 // ---------- 16.2 — lightweight smoke perf check ----------
 
 /// Build a vault with 10 envs * 10 keys, then assert each read command stays
-/// well under a coarse 1-second wall-clock budget. The 50 ms target in tasks.md
+/// well under a coarse 1-second wall-clock budget. The 50 ms target
 /// 16.2 assumes a release build; we run in debug here and use a generous cap
 /// so the test stays signal-positive on slow CI without being noisy.
 #[test]
@@ -125,7 +128,7 @@ fn smoke_perf_read_commands_complete_in_reasonable_time() {
             .success();
     }
 
-    // The 50 ms / 200 ms targets in tasks.md 16.2 / 16.3 assume a release
+    // The 50 ms / 200 ms targets 16.2 / 16.3 assume a release
     // build. Debug mode runs scrypt 10×–50× slower; commands that decrypt
     // (status, log, diff) inherit that. We use coarse separate budgets so
     // the smoke test still catches order-of-magnitude regressions on PR CI.

@@ -1,8 +1,9 @@
 //! `envroll rm <name>` — remove an env. Confirmation gated by `--yes`.
 
-use std::io::{self, BufRead, IsTerminal, Write};
+use std::io::IsTerminal;
 
 use clap::Args as ClapArgs;
+use dialoguer::{theme::ColorfulTheme, Confirm};
 
 use crate::cli::common::{clear_dotenv, missing_existing_env_error, open_project, LockMode};
 use crate::cli::Context;
@@ -79,19 +80,16 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
 }
 
 fn confirm_rm(name: &str) -> Result<bool, EnvrollError> {
-    let mut stderr = io::stderr();
-    write!(stderr, "Remove env \"{name}\"? [y/N]: ").map_err(EnvrollError::Io)?;
-    stderr.flush().map_err(EnvrollError::Io)?;
-
-    if !io::stdin().is_terminal() {
-        // Non-interactive without --yes: refuse to silently destroy.
+    // Non-interactive (no TTY) without --yes is always a "no" — we refuse to
+    // silently destroy data. dialoguer would block forever on a piped stdin
+    // so we short-circuit before constructing it.
+    if !std::io::stdin().is_terminal() {
+        eprintln!("envroll: refusing to remove env \"{name}\" without --yes (stdin is not a TTY)");
         return Ok(false);
     }
-    let mut answer = String::new();
-    io::stdin()
-        .lock()
-        .read_line(&mut answer)
-        .map_err(EnvrollError::Io)?;
-    let trimmed = answer.trim().to_ascii_lowercase();
-    Ok(trimmed == "y" || trimmed == "yes")
+    Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt(format!("Remove env \"{name}\"?"))
+        .default(false)
+        .interact()
+        .map_err(|e| EnvrollError::Io(std::io::Error::other(format!("confirmation prompt: {e}"))))
 }

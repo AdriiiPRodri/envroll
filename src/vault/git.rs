@@ -6,7 +6,8 @@
 //! history walking. We do NOT expose `git2` types in the public signatures
 //! beyond [`Oid`] (which is a 20-byte hash and convenient enough to leak).
 //!
-//! Author identity is fixed (design.md / 4.1): `envroll <envroll@local>`.
+//! Author identity is fixed at `envroll <envroll@local>` so the user's
+//! personal git identity never leaks into the vault history.
 //! Default branch is `main`.
 
 use std::path::{Path, PathBuf};
@@ -28,7 +29,7 @@ const DEFAULT_BRANCH: &str = "main";
 /// Conventional remote name for the optional sync remote.
 const ORIGIN: &str = "origin";
 
-/// How to resolve a ref to a single commit on a given env (design.md D5).
+/// How to resolve a ref to a single commit on a given env.
 #[derive(Clone, Debug)]
 pub enum RefForm {
     /// `<name>` — the env's tip.
@@ -114,7 +115,7 @@ impl VaultRepo {
         Ok(oid)
     }
 
-    /// 4.6: Is the working tree dirty? Per the sync pre-flight (design.md D10),
+    /// 4.6: Is the working tree dirty? Per the sync pre-flight,
     /// "dirty" means any tracked file has uncommitted changes OR there is any
     /// non-ignored untracked file under the vault root.
     pub fn is_working_tree_dirty(&self) -> Result<bool, EnvrollError> {

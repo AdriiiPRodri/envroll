@@ -5,8 +5,8 @@ A single statically-linked Rust binary that versions, switches, and encrypts env
 
 <p align="center">
   <a href="https://crates.io/crates/envroll"><img src="https://img.shields.io/crates/v/envroll.svg" alt="crates.io"></a>
-  <a href="https://github.com/your-org/envroll/actions"><img src="https://img.shields.io/github/actions/workflow/status/your-org/envroll/ci.yml?branch=main" alt="CI"></a>
-  <a href="https://github.com/your-org/envroll/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+  <a href="https://github.com/AdriiiPRodri/envroll/actions"><img src="https://img.shields.io/github/actions/workflow/status/AdriiiPRodri/envroll/ci.yml?branch=main" alt="CI"></a>
+  <a href="https://github.com/AdriiiPRodri/envroll/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/rust-1.89%2B-orange.svg" alt="Rust 1.89+">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platforms">
 </p>
@@ -92,13 +92,13 @@ That's `envroll`.
 cargo install envroll
 
 # Homebrew (macOS / Linux)
-brew install your-org/tap/envroll
+brew install AdriiiPRodri/tap/envroll
 
 # Prebuilt binaries (macOS, Linux, Windows)
-curl -LsSf https://github.com/your-org/envroll/releases/latest/download/envroll-installer.sh | sh
+curl -LsSf https://github.com/AdriiiPRodri/envroll/releases/latest/download/envroll-installer.sh | sh
 ```
 
-Or grab a prebuilt binary from the [Releases](https://github.com/your-org/envroll/releases) page. SHA-256 sums are signed.
+Or grab a prebuilt binary from the [Releases](https://github.com/AdriiiPRodri/envroll/releases) page. SHA-256 sums are signed.
 
 **Platforms:** macOS (x86_64, aarch64) and Linux (x86_64, aarch64) are first-class. Windows is supported on a best-effort basis with a copy-mode fallback for environments without symlink privileges (set `ENVROLL_USE_COPY=1` or enable Windows Developer Mode).
 
@@ -354,7 +354,7 @@ See [SECURITY.md](SECURITY.md) for the full threat model and how to report vulne
 PRs welcome. The codebase is meant to stay small and legible — one binary, no clever macros, dependencies pinned tight. If you're not sure whether a change fits, open an issue first and we'll talk it through.
 
 ```bash
-git clone https://github.com/your-org/envroll
+git clone https://github.com/AdriiiPRodri/envroll
 cd envroll
 cargo test
 cargo run -- --help

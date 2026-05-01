@@ -1,4 +1,4 @@
-//! Full perf soak (tasks.md 16.3) and release-binary size check (16.4).
+//! Full perf soak and release-binary size check (16.4).
 //!
 //! Both are gated on `--features perf` so the default `cargo test` run stays
 //! fast. CI runs this lane on dedicated hardware where the 200 ms / 25 MB

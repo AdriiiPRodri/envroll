@@ -2,13 +2,12 @@
 //!
 //! - [`Vault`]: the resolved vault root + the operations that load / initialize
 //!   it on disk.
-//! - [`Mode`] + [`infer_mode`]: runtime classification of `./.env` (design.md D9).
+//! - [`Mode`] + [`infer_mode`]: runtime classification of `./.env`.
 //!   No persisted `mode` field; we always re-derive at command time.
 //! - [`fs`]: low-level filesystem helpers (atomic write, perms, orphan sweep).
 //!
-//! Vault layout is documented in design.md D2. This module owns creation of
-//! everything *except* the libgit2 repo (handled separately in
-//! `src/vault/git.rs` once the git layer lands) and the per-project subdirs
+//! This module owns creation of everything *except* the libgit2 repo
+//! (handled separately in `src/vault/git.rs`) and the per-project subdirs
 //! (handled by the project lifecycle commands).
 
 pub mod fs;
@@ -27,14 +26,14 @@ use crate::paths::{project_checkout_dir, vault_canary, vault_git_dir, vault_vers
 /// project-lifecycle spec ("Binary encounters a future-version vault").
 pub const VAULT_SCHEMA_VERSION: u32 = 1;
 
-/// Vault root mode (design.md D8).
+/// Vault root mode.
 const VAULT_ROOT_MODE: u32 = 0o700;
 
 /// Mode for plaintext metadata files (`.envroll-version`, `.gitignore`,
 /// `manifest.toml`). No secrets, so 0644 is fine.
 const META_FILE_MODE: u32 = 0o644;
 
-/// Lines written into `<vault>/.gitignore` on first init (design.md D2).
+/// Lines written into `<vault>/.gitignore` on first init.
 /// Every commit synced to a remote MUST have these excluded so plaintext
 /// `.checkout/` never leaves the local machine.
 const GITIGNORE_BODY: &str = concat!(
@@ -161,7 +160,7 @@ fn read_vault_version(root: &Path) -> Result<u32, EnvrollError> {
     })
 }
 
-/// Runtime classification of `./.env` (design.md D9).
+/// Runtime classification of `./.env`.
 ///
 /// We never persist this — every command re-derives it from the on-disk type
 /// of `./.env`. That keeps `manifest.toml` machine-independent (the same file
@@ -184,8 +183,7 @@ pub enum Mode {
     StaleOurSymlink,
 
     /// `./.env` is a symlink to anywhere outside our `.checkout/`, broken or
-    /// not. Refuse all working-copy ops without `--force` / `--rescue` per
-    /// design.md D9.
+    /// not. Refuse all working-copy ops without `--force` / `--rescue`.
     ForeignSymlink,
 
     /// `./.env` is a regular file (not a symlink). This is copy-mode — either
@@ -194,7 +192,7 @@ pub enum Mode {
     Copy,
 }
 
-/// Inspect `./.env` under `project_root` and classify it (design.md D9).
+/// Inspect `./.env` under `project_root` and classify it.
 ///
 /// `project_id` is the registered ID for this project; we use it to compute
 /// the path of `<vault>/projects/<id>/.checkout/` so we can decide whether a
@@ -266,8 +264,7 @@ pub fn historical_ttl_days(_vault_root: &Path) -> u32 {
     DEFAULT_HISTORICAL_TTL_DAYS
 }
 
-/// Sweep stale historical-checkout files (`<name>@<12hex>`) under one project
-/// per design.md D5 / env-switching spec.
+/// Sweep stale historical-checkout files (`<name>@<12hex>`) under one project.
 ///
 /// Eligibility: file matches `<name>@<12 hex chars>` AND its mtime is older
 /// than the configured TTL AND no commit on `<name>`'s history starts with
@@ -281,7 +278,7 @@ pub fn historical_ttl_days(_vault_root: &Path) -> u32 {
 /// Callers should only invoke this from commands that already touch
 /// `.checkout/` (use, save, fork, set, copy, edit, rm, rename, status, diff,
 /// log). Read-only commands that don't (current, projects, list, get) MUST
-/// NOT call this — sweeping under a shared lock conflicts with design.md D15.
+/// NOT call this — sweeping under a shared lock breaks the lock-kind invariant.
 pub fn sweep_historical_checkouts(
     vault: &Vault,
     repo: &git::VaultRepo,

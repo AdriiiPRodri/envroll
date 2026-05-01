@@ -1,4 +1,4 @@
-//! Best-effort advisory vault lock (design.md D15).
+//! Best-effort advisory vault lock.
 //!
 //! Lock kind per command:
 //! - **Exclusive:** `init`, `save`, `fork`, `set`, `copy`, `rm`, `rename`,
@@ -8,10 +8,9 @@
 //! - **None:** `current`, `projects` — these only read `manifest.toml`, which
 //!   is always written via tempfile+rename, so no torn read is possible.
 //!
-//! Implementation note: tasks.md 2.4 originally specified `fs2::FileExt`, but
-//! Rust 1.89+ shipped `File::try_lock` / `try_lock_shared` in std with the
-//! same flock semantics, making fs2 redundant. We use std directly and skip
-//! the dep.
+//! Implementation note: Rust 1.89+ shipped `File::try_lock` / `try_lock_shared`
+//! in std with the same flock semantics that `fs2::FileExt` provides, so we
+//! use std directly and skip the extra dep.
 
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::Path;

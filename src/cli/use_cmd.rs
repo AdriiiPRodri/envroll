@@ -4,7 +4,7 @@
 //! the CLI subcommand name is still spelled `use` via `#[command(name = "use")]`
 //! on the enum variant.
 //!
-//! Covers section 10.1 – 10.5 of tasks.md:
+//! Covers section 10.1 – 10.5:
 //! - latest activation (no `@`),
 //! - historical activation (`<name>@<short-hash>` / `<name>@~N`),
 //! - `--rescue <name>` companion (shares the `create_env_from_path` helper),
@@ -39,7 +39,7 @@ pub struct Args {
 
     /// Save the existing `./.env` as `<name>` first, then activate the
     /// originally-requested ref. Calls the same code path as `fork`
-    /// (design.md D3).
+    ///.
     #[arg(long, value_name = "NAME")]
     pub rescue: Option<String>,
 }
@@ -71,7 +71,7 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         )));
     }
 
-    // Pre-flight ./.env state per design.md D9 / env-switching spec.
+    // Pre-flight ./.env state / env-switching spec.
     // Stale-our-symlink is recoverable (we'll overwrite via atomic rename).
     // Foreign symlinks and regular files refuse without --force / --rescue.
     let needs_overwrite_consent = matches!(prep.mode, Mode::ForeignSymlink | Mode::Copy);

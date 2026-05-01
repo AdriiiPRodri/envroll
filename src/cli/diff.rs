@@ -3,19 +3,20 @@
 //! Both refs are resolved via the shared ref grammar (`<name>`,
 //! `<name>@<short-hash>`, `<name>@~N`). The two named envs may be the same
 //! (compare two versions of one env) or different (compare current state of
-//! two envs). Acquires a shared lock per design.md D15.
+//! two envs). Acquires a shared lock.
 
 use std::collections::BTreeSet;
 
 use clap::Args as ClapArgs;
 use serde::Serialize;
+use tabled::{builder::Builder, settings::Style};
 
 use crate::cli::common::{
     missing_existing_env_error, open_project, parse_ref, read_pass_and_verify, LockMode,
 };
 use crate::cli::Context;
 use crate::crypto;
-use crate::errors::{generic, EnvrollError};
+use crate::errors::{usage, EnvrollError};
 use crate::output::OutputFormat;
 use crate::parser;
 use crate::vault::git::RefForm;
@@ -31,8 +32,16 @@ pub struct Args {
     #[arg(value_name = "B")]
     pub b: Option<String>,
 
-    /// Print actual values instead of `***` masks.
+    /// Mask values with `********` instead of printing them. Off by default —
+    /// you're on your own machine looking at your own envs. Enable this when
+    /// you're about to paste the output into a screenshot, ticket, or chat.
     #[arg(long)]
+    pub mask: bool,
+
+    /// Deprecated alias for the inverse of `--mask`. Kept so the spec's
+    /// original `--show-values` invocation still works; new scripts should
+    /// just stop passing it (showing values is the default now).
+    #[arg(long, hide = true)]
     pub show_values: bool,
 }
 
@@ -76,7 +85,10 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
             ));
         }
         (Some(_), None) => {
-            return Err(generic("missing second ref.\nusage: envroll diff <A> <B>"));
+            return Err(usage(
+                "missing second ref",
+                Some("usage: envroll diff <A> <B>".to_string()),
+            ));
         }
     };
 
@@ -127,19 +139,12 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
 
     match ctx.format {
         OutputFormat::Human => {
-            for KeyVal { key, value } in &added {
-                println!("+{key} {}", display(value, args.show_values));
-            }
-            for KeyVal { key, value } in &removed {
-                println!("-{key} {}", display(value, args.show_values));
-            }
-            for KeyChange { key, a, b } in &changed {
-                println!(
-                    "~{key} {} -> {}",
-                    display(a, args.show_values),
-                    display(b, args.show_values)
-                );
-            }
+            // Default: show values. `--mask` opts into masking; the legacy
+            // `--show-values` is honoured (its presence forces show even if
+            // `--mask` was somehow combined with it, since the user's later
+            // intent is the more interesting flag).
+            let show = !args.mask || args.show_values;
+            print_human_table(&a_arg, &b_arg, &added, &removed, &changed, show);
         }
         OutputFormat::Json => {
             let payload = DiffJson {
@@ -208,4 +213,41 @@ fn display(value: &str, show: bool) -> String {
     } else {
         "********".to_string()
     }
+}
+
+/// Render the diff as a tabled `Builder` so the A/B column headers can carry
+/// the actual env-arg strings (`dev`, `stg@a1b2c3d4`, etc.) instead of the
+/// static `A` / `B` placeholders the derive macro forces. Values stay masked
+/// unless `--show-values` was passed.
+fn print_human_table(
+    a_arg: &str,
+    b_arg: &str,
+    added: &[KeyVal],
+    removed: &[KeyVal],
+    changed: &[KeyChange],
+    show_values: bool,
+) {
+    if added.is_empty() && removed.is_empty() && changed.is_empty() {
+        println!("no differences between {a_arg} and {b_arg}");
+        return;
+    }
+    let mut builder = Builder::default();
+    builder.push_record(["OP", "KEY", a_arg, b_arg]);
+    for KeyVal { key, value } in added {
+        builder.push_record(["+", key, "—", &display(value, show_values)]);
+    }
+    for KeyVal { key, value } in removed {
+        builder.push_record(["-", key, &display(value, show_values), "—"]);
+    }
+    for KeyChange { key, a, b } in changed {
+        builder.push_record([
+            "~",
+            key,
+            &display(a, show_values),
+            &display(b, show_values),
+        ]);
+    }
+    let mut table = builder.build();
+    table.with(Style::rounded());
+    println!("{table}");
 }

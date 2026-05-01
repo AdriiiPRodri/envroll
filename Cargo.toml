@@ -6,8 +6,8 @@ rust-version = "1.89"
 description = "git for your .env files — local-first, encrypted, single-binary environment manager"
 authors = ["Adrián Peña"]
 license = "MIT"
-repository = "https://github.com/your-org/envroll"
-homepage = "https://github.com/your-org/envroll"
+repository = "https://github.com/AdriiiPRodri/envroll"
+homepage = "https://github.com/AdriiiPRodri/envroll"
 readme = "README.md"
 keywords = ["env", "dotenv", "secrets", "vault", "cli"]
 categories = ["command-line-utilities", "config", "development-tools"]
@@ -36,6 +36,13 @@ sha2 = "0.10"
 anstyle = "1.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 serde_json = "1.0"
+# UX layer: errors (miette), tables (tabled), confirmation prompts
+# (dialoguer), and sync progress spinners (indicatif). All four agreed on
+# in the 2026-05-01 design discussion — see commit history.
+miette = { version = "7.6", features = ["derive", "fancy"] }
+tabled = { version = "0.20", features = ["ansi"] }
+dialoguer = "0.12"
+indicatif = "0.18"
 
 [dev-dependencies]
 assert_cmd = "2.0"

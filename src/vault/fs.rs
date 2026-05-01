@@ -1,4 +1,4 @@
-//! Filesystem helpers for the vault layer (design.md D8).
+//! Filesystem helpers for the vault layer.
 //!
 //! - [`atomic_write`] writes via tempfile-in-same-dir + fsync + rename + parent
 //!   fsync. The destination either contains the prior content unchanged or the
@@ -15,12 +15,12 @@ use std::time::{Duration, SystemTime};
 use crate::errors::EnvrollError;
 use crate::paths::{rand_hex6, tempfile_path_with, TEMPFILE_PREFIX_INFIX};
 
-/// Mtime threshold for orphan tempfile cleanup (design.md D8).
+/// Mtime threshold for orphan tempfile cleanup.
 const ORPHAN_TEMPFILE_MAX_AGE: Duration = Duration::from_secs(60);
 
 /// Atomically replace `dest` with `data`, applying POSIX `mode` to the new file.
 ///
-/// Sequence (design.md D8):
+/// Sequence:
 ///   1. Create `<dirname>/.<filename>.envroll-tmp.<pid>.<rand6>` with `mode` 0600/0644 etc.
 ///   2. Write the full payload, `flush`, `fsync`.
 ///   3. `rename` over `dest` (atomic on POSIX same-fs).
@@ -80,7 +80,7 @@ fn apply_mode_to_open_options(_opts: &mut OpenOptions, _mode: u32) {
 ///
 /// On Windows this is a best-effort no-op; the design accepts that mode bits
 /// don't translate, and a future enhancement may set a current-user-only ACL
-/// (design.md D8).
+///.
 pub fn set_perms(path: &Path, mode: u32) -> Result<(), EnvrollError> {
     #[cfg(unix)]
     {
@@ -185,7 +185,7 @@ pub fn sweep_orphan_tempfiles(vault_root: &Path) -> Result<usize, EnvrollError> 
     Ok(removed)
 }
 
-/// Match the tempfile name pattern from design.md D8:
+/// Match the tempfile name pattern:
 ///   `^\.[^/]+\.envroll-tmp\.[0-9]+\.[0-9a-f]{6}$`
 fn is_envroll_tempfile_name(path: &Path) -> bool {
     let name = match path.file_name().and_then(|s| s.to_str()) {

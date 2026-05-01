@@ -1,4 +1,4 @@
-//! Passphrase intake (design.md D11).
+//! Passphrase intake.
 //!
 //! Precedence on every encrypted-content operation:
 //!

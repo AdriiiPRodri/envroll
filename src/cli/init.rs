@@ -32,7 +32,7 @@ use crate::vault::git::VaultRepo;
 use crate::vault::Vault;
 
 /// Permissions: 0700 for project dirs (parity with the vault root and
-/// `.checkout/` per design.md D8 — denies a local attacker enumeration).
+/// `.checkout/` — denies a local attacker enumeration).
 const PROJECT_DIR_MODE: u32 = 0o700;
 const META_FILE_MODE: u32 = 0o644;
 
@@ -40,7 +40,7 @@ const META_FILE_MODE: u32 = 0o644;
 pub struct Args {
     /// Override project ID derivation. Use when the auto-derived ID would
     /// collide (monorepo subdirs sharing an origin) or when reattaching a
-    /// renamed project (design.md D1).
+    /// renamed project.
     #[arg(long, value_name = "ID")]
     pub id: Option<String>,
 
@@ -51,7 +51,7 @@ pub struct Args {
 
     /// Verify the vault passphrase by decrypting the canary, then exit.
     /// Does not register a project. Exits 10 on a wrong passphrase
-    /// (design.md D20).
+    ///.
     #[arg(long)]
     pub verify_passphrase: bool,
 }

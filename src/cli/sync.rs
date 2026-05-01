@@ -5,9 +5,13 @@
 //!
 //! Uses the libgit2 wrappers in `vault::git` (4.7) to fetch, classify the
 //! relationship between local HEAD and `origin/main`, and either fast-forward
-//! pull / fast-forward push / refuse on divergence (design.md D10).
+//! pull / fast-forward push / refuse on divergence.
+
+use std::io::IsTerminal;
+use std::time::Duration;
 
 use clap::Args as ClapArgs;
+use indicatif::{ProgressBar, ProgressStyle};
 
 use crate::cli::common::{open_project, LockMode};
 use crate::cli::Context;
@@ -33,7 +37,10 @@ pub fn run(_args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         return Err(EnvrollError::NoRemote);
     }
 
-    prep.repo.fetch()?;
+    let fetch_spinner = spinner("fetching from origin…");
+    let fetch_result = prep.repo.fetch();
+    finish_spinner(&fetch_spinner, fetch_result.is_ok());
+    fetch_result?;
 
     let local = prep.repo.local_head()?;
     let remote = prep.repo.remote_head()?;
@@ -48,30 +55,41 @@ pub fn run(_args: Args, ctx: &Context) -> Result<(), EnvrollError> {
             let local_is_ancestor = prep.repo.is_ancestor(l, r)?;
             let remote_is_ancestor = prep.repo.is_ancestor(r, l)?;
             if local_is_ancestor {
-                prep.repo.fast_forward_to(r)?;
+                let s = spinner("fast-forwarding local to remote tip…");
+                let res = prep.repo.fast_forward_to(r);
+                finish_spinner(&s, res.is_ok());
+                res?;
                 println!("pulled {} → {}", short(l), short(r));
                 Ok(())
             } else if remote_is_ancestor {
-                prep.repo.push_fast_forward()?;
+                let s = spinner("pushing local to origin…");
+                let res = prep.repo.push_fast_forward();
+                finish_spinner(&s, res.is_ok());
+                res?;
                 println!("pushed {} → {}", short(r), short(l));
                 Ok(())
             } else {
-                // Divergence — emit the verbatim multi-line message from
-                // design.md D10 to stderr (via the EnvrollError Display path)
-                // and exit EXIT_SYNC_CONFLICT.
+                // Divergence — emit the verbatim multi-line conflict
+                // message to stderr and exit EXIT_SYNC_CONFLICT.
                 eprintln!("{}", sync_conflict_message());
                 Err(EnvrollError::SyncConflict)
             }
         }
         (Some(_), None) => {
             // Remote exists but has no main branch yet — push.
-            prep.repo.push_fast_forward()?;
+            let s = spinner("pushing local to origin (initial)…");
+            let res = prep.repo.push_fast_forward();
+            finish_spinner(&s, res.is_ok());
+            res?;
             println!("pushed (initial)");
             Ok(())
         }
         (None, Some(r)) => {
             // Local has no commits but remote does — pull.
-            prep.repo.fast_forward_to(r)?;
+            let s = spinner("fast-forwarding local to remote (initial)…");
+            let res = prep.repo.fast_forward_to(r);
+            finish_spinner(&s, res.is_ok());
+            res?;
             println!("pulled (initial) → {}", short(r));
             Ok(())
         }
@@ -88,7 +106,43 @@ fn short(oid: git2::Oid) -> String {
     s[..12.min(s.len())].to_string()
 }
 
-/// Verbatim multi-line conflict message from design.md D10. Printed to stderr
+/// Build an indicatif spinner with envroll's standard tick template, or a
+/// no-op hidden spinner when stderr is not a TTY (so JSON / scripted callers
+/// see clean output without the animation bytes).
+fn spinner(message: &str) -> ProgressBar {
+    if !std::io::stderr().is_terminal() {
+        return ProgressBar::hidden();
+    }
+    let pb = ProgressBar::new_spinner();
+    pb.set_style(
+        ProgressStyle::with_template("{spinner:.cyan} {msg}")
+            .unwrap()
+            .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
+    );
+    pb.set_message(message.to_string());
+    pb.enable_steady_tick(Duration::from_millis(80));
+    pb
+}
+
+/// Replace the spinner with a `✓` (success) or `✗` (failure) glyph and the
+/// final message, matching modern CLI conventions (cargo, deno, gh).
+fn finish_spinner(pb: &ProgressBar, ok: bool) {
+    let suffix = if ok { "done" } else { "failed" };
+    let glyph = if ok { "✓" } else { "✗" };
+    let original = pb.message();
+    pb.set_style(
+        ProgressStyle::with_template(if ok {
+            "{prefix:.green.bold} {msg}"
+        } else {
+            "{prefix:.red.bold} {msg}"
+        })
+        .unwrap(),
+    );
+    pb.set_prefix(glyph.to_string());
+    pb.finish_with_message(format!("{original} {suffix}"));
+}
+
+/// Verbatim multi-line conflict message. Printed to stderr
 /// before the EnvrollError::SyncConflict propagates to main; main's own
 /// formatter then prints the short single-line form so the user sees both
 /// the structured message and the actionable instructions.

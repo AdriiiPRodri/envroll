@@ -1,4 +1,4 @@
-//! `envroll fork <new-name>` — canonical creation verb (design.md D6).
+//! `envroll fork <new-name>` — canonical creation verb.
 //!
 //! Two modes, selected at runtime:
 //! - **Active env exists**: fork its working copy as `<new-name>`.

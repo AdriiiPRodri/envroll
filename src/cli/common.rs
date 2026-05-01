@@ -6,8 +6,7 @@
 //! module bundles that into [`PreparedProject`] and a couple of constructors,
 //! plus a few utilities every command needs (passphrase + canary, atomic
 //! symlink swap, manifest commit, "create env from path" — the shared
-//! pathway that powers both `envroll fork` and `envroll use --rescue` per
-//! design.md D3).
+//! pathway that powers both `envroll fork` and `envroll use --rescue`).
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +14,7 @@ use age::secrecy::SecretString;
 
 use crate::cli::Context;
 use crate::crypto;
-use crate::errors::{generic, EnvrollError};
+use crate::errors::{generic, usage, EnvrollError};
 use crate::lock::{acquire_exclusive, acquire_shared, LockGuard};
 use crate::manifest::{find_project_for_cwd, Manifest};
 use crate::paths::{
@@ -107,7 +106,7 @@ pub fn open_project(ctx: &Context, lock_mode: LockMode) -> Result<PreparedProjec
     let lock = match lock_mode {
         LockMode::Exclusive => {
             let g = acquire_exclusive(&lock_path)?;
-            // Sweep orphan tempfiles only on exclusive sessions per design.md D8.
+            // Sweep orphan tempfiles only on exclusive sessions.
             let _ = vfs::sweep_orphan_tempfiles(vault.root());
             g
         }
@@ -264,7 +263,7 @@ pub fn clear_dotenv(project_root: &Path) -> Result<(), EnvrollError> {
     }
 }
 
-/// The shared `create_env_from_path` helper (design.md D3). Encrypts
+/// The shared `create_env_from_path` helper. Encrypts
 /// `plaintext` as a new env named `name`, writes the corresponding checkout,
 /// retargets `./.env` to point at it, updates the manifest's `active` (and
 /// clears `active_ref`), and commits both the new `.age` blob and the
@@ -325,7 +324,7 @@ pub fn iso_now_local() -> String {
 
 /// The verbatim refuse message when `envroll save` (or `set`/`copy` against
 /// the active env) would silently rewind a historically-pinned env
-/// (design.md D18). Lives here so callers stay byte-identical.
+///. Lives here so callers stay byte-identical.
 pub fn active_ref_pinned_message(name: &str, hash_part: &str) -> String {
     format!(
         "active env \"{name}\" is pinned to historical ref {hash_part}; saving here \
@@ -341,8 +340,8 @@ pub fn parse_active_ref_hash(active_ref: &str) -> Option<&str> {
     active_ref.split_once('@').map(|(_, h)| h)
 }
 
-/// Parse a `<ref>` argument shared between `use`, `exec`, `log`, `diff` per
-/// design.md D5. Forms:
+/// Parse a `<ref>` argument shared between `use`, `exec`, `log`, `diff`.
+/// Forms:
 /// - `<name>` — the env's tip ([`RefForm::Latest`]).
 /// - `<name>@<short-hash>` — short hash, MUST be `>= 7` ASCII hex chars.
 /// - `<name>@~N` — relative offset, `N >= 1`.
@@ -387,7 +386,7 @@ pub fn parse_ref(s: &str) -> Result<(String, RefForm), EnvrollError> {
     Ok((name.to_string(), RefForm::ShortHash(suffix.to_string())))
 }
 
-/// 12-hex-char prefix of an OID per design.md D5. Used as the canonical
+/// 12-hex-char prefix of an OID. Used as the canonical
 /// suffix on historical checkout filenames `<name>@<12hex>`.
 pub fn short_oid_12(oid: git2::Oid) -> String {
     let s = oid.to_string();
@@ -425,19 +424,20 @@ pub fn list_env_names(prep: &PreparedProject) -> Vec<String> {
 /// context-switch to `envroll list`.
 ///
 /// `usage_line` is the documented invocation shown under the env list
-/// (e.g., `"envroll log <ENV>"`).
+/// (e.g., `"envroll log <ENV>"`). Returned as an [`EnvrollError::Usage`] so
+/// miette renders the header and the help body with separate visual weight
+/// (the `×` line and the `help:` block, respectively).
 pub fn missing_existing_env_error(prep: &PreparedProject, usage_line: &str) -> EnvrollError {
     let names = list_env_names(prep);
-    if names.is_empty() {
-        return EnvrollError::Generic(format!(
-            "no env name given, and this project has no envs yet. \
-             Create one with `envroll fork <name>`.\nusage: {usage_line}"
-        ));
-    }
-    EnvrollError::Generic(format!(
-        "no env name given. Envs in this project: {}\nusage: {usage_line}",
-        names.join(", ")
-    ))
+    let body = if names.is_empty() {
+        format!("This project has no envs yet — create one with `envroll fork <name>`.\nusage: {usage_line}")
+    } else {
+        format!(
+            "Envs in this project: {}\nusage: {usage_line}",
+            names.join(", ")
+        )
+    };
+    usage("no env name given", Some(body))
 }
 
 /// Variant of [`missing_existing_env_error`] for commands whose positional
@@ -446,13 +446,15 @@ pub fn missing_existing_env_error(prep: &PreparedProject, usage_line: &str) -> E
 /// of "pick one".
 pub fn missing_new_env_error(prep: &PreparedProject, usage_line: &str) -> EnvrollError {
     let names = list_env_names(prep);
-    if names.is_empty() {
-        return EnvrollError::Generic(format!("no name given.\nusage: {usage_line}"));
-    }
-    EnvrollError::Generic(format!(
-        "no name given. Pick something other than the existing envs ({}).\nusage: {usage_line}",
-        names.join(", ")
-    ))
+    let body = if names.is_empty() {
+        format!("usage: {usage_line}")
+    } else {
+        format!(
+            "Pick a name other than the existing envs ({}).\nusage: {usage_line}",
+            names.join(", ")
+        )
+    };
+    usage("no name given", Some(body))
 }
 
 #[cfg(test)]

@@ -1,18 +1,18 @@
 //! `envroll get <KEY>` — print a single key's value to stdout.
 //!
 //! Script-friendly: never masked, single trailing `\n`. Exits 20 if the key
-//! is missing. Acquires a shared lock per design.md D15.
+//! is missing. Acquires a shared lock.
 //!
 //! Note: `get` deliberately does NOT trigger the historical-checkout TTL
-//! sweep — design.md D5 names it as one of the four read-only commands that
-//! must NOT touch `.checkout/` cleanup.
+//! sweep — it's one of the read-only commands that must not touch
+//! `.checkout/` cleanup.
 
 use clap::Args as ClapArgs;
 
 use crate::cli::common::{open_project, read_pass_and_verify, LockMode};
 use crate::cli::Context;
 use crate::crypto;
-use crate::errors::{generic, EnvrollError};
+use crate::errors::{usage, EnvrollError};
 use crate::parser;
 
 #[derive(Debug, ClapArgs)]
@@ -37,9 +37,9 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
         Some(n) => n.to_string(),
         None => {
             if prep.manifest.active.is_empty() {
-                return Err(EnvrollError::EnvNotFound(
-                    "no active env, and --from <ENV> was not given.\nusage: envroll get <KEY> [--from <ENV>]"
-                        .to_string(),
+                return Err(usage(
+                    "no active env, and --from <ENV> was not given",
+                    Some("usage: envroll get <KEY> [--from <ENV>]".to_string()),
                 ));
             }
             prep.manifest.active.clone()
@@ -54,11 +54,14 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
             } else {
                 format!("active env \"{env_name}\"")
             };
-            return Err(generic(format!(
-                "no KEY given. Would read from {source}.\n\
-                 To see the keys in this env: envroll status --show-values\n\
-                 usage: envroll get <KEY> [--from <ENV>]"
-            )));
+            return Err(usage(
+                "no KEY given",
+                Some(format!(
+                    "Would read from {source}.\n\
+                     To see the keys in this env: envroll status --show-values\n\
+                     usage: envroll get <KEY> [--from <ENV>]"
+                )),
+            ));
         }
     };
 
