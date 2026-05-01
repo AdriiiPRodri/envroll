@@ -471,6 +471,12 @@ envroll fills the gap where you want **`direnv`-style local control** with **Saa
 
 ---
 
+## Changelog
+
+Every release's user-facing changes are documented in [CHANGELOG.md](CHANGELOG.md). The release pipeline reads from there to generate GitHub release notes, so the changelog is the canonical source.
+
+---
+
 ## Status
 
 envroll is **pre-1.0**. The on-disk format and the CLI surface are frozen and won't change incompatibly within `0.1.x`, but expect:

@@ -2,9 +2,9 @@
 //! one env or every env in the project.
 //!
 //! Refactoring helper. Without this, renaming `DATABASE_URL` to `DB_URL`
-//! across `dev`, `staging`, `prod`, and `feature-x` is four `envroll set`
-//! + four `envroll set --in <env> ...` invocations, plus you have to
-//! remember to delete the old key — easy to leave dangling references.
+//! across `dev`, `staging`, `prod`, and `feature-x` requires eight separate
+//! `envroll set --in <env>` invocations plus remembering to delete the old
+//! key in each env — easy to leave dangling references.
 //!
 //! Three target modes, in precedence order:
 //!
