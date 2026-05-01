@@ -184,27 +184,163 @@ The remote can be public, private, on-prem, or a directory mounted from a NAS. e
 
 | Command | What it does | Lock |
 | --- | --- | --- |
-| `envroll init [--id <id>] [--verify-passphrase]` | Initialize the vault (first run) and register this directory. `--verify-passphrase` re-prompts and tests the canary. | exclusive |
-| `envroll projects [--format json]` | List every registered project on this machine. | none |
-| `envroll list` (alias `ls`) `[--all] [--format json]` | List envs in the current project (or all projects with `--all`). | shared |
+| `envroll init [--id <id>] [--target <filename>] [--verify-passphrase]` | Initialize the vault (first run) and register this directory. `--target` overrides the working-copy filename (default `.env`; use `.env.local` for Next.js / Vite / Astro / Remix / Nuxt). `--verify-passphrase` re-prompts and tests the canary. | exclusive |
+| `envroll projects` | List every registered project on this machine. | none |
+| `envroll list` (alias `ls`) `[--all]` | List envs in the current project (or all projects with `--all`). | shared |
 | `envroll current` | Print the active env name. | none |
-| `envroll fork <name> [-m <msg>] [--force]` | Create a new env from the active env or `./.env`. | exclusive |
+| `envroll fork <name> [-m <msg>] [--force]` | Create a new env from the active env or the project's working-copy file. | exclusive |
+| `envroll import <file> --as <name> [--force]` | Adopt an existing `.env`-style file as a new env. Onboarding shortcut. | exclusive |
+| `envroll export <env> [--output dotenv\|json\|shell]` | Print an env's plaintext content to stdout. Anti-lock-in escape hatch — pipe to a file, AWS Secrets Manager, `kubectl create secret`, etc. **Never masked.** | shared |
 | `envroll save [-m <msg>] [--force]` | Save the working copy to the active env. `--force` deliberately rewinds when pinned to a historical ref. | exclusive |
 | `envroll use <ref> [--force \| --rescue <name>]` | Activate an env. `<ref>` is `<name>` (latest), `<name>@<short-hash>`, or `<name>@~N`. | exclusive |
-| `envroll status [--show-values] [--format json]` | Active env, mode (symlink / copy), dirty state, key-level diff. Values masked unless `--show-values`. | shared |
+| `envroll status [--mask]` | Active env, mode (symlink / copy), dirty state, key-level diff. Values shown by default; `--mask` hides them for paste-safe output. | shared |
 | `envroll rename <old> <new> [--force]` | Rename an env in place; libgit2 file-rename keeps history. | exclusive |
+| `envroll rename-key <OLD> <NEW> [--in <env> \| --all] [--force]` | Rename a key (e.g. `DATABASE_URL` → `DB_URL`) across one or every env in the project. | exclusive |
 | `envroll rm <name>` | Remove an env. Use the global `--yes` to skip the confirmation prompt. | exclusive |
 | `envroll edit <name>` | Open an env in `$EDITOR` (fallbacks: `$VISUAL` → `vi`/`vim` on Unix, `notepad` on Windows). The vault lock is released for the editor's lifetime. | exclusive (then released) |
-| `envroll log <name> [--format json]` | Commit history for the env, newest-first, with `+N -M ~K` summaries. | shared |
-| `envroll diff <a> <b> [--show-values] [--format json]` | Key-level diff between any two refs. | shared |
+| `envroll log <name>` | Commit history for the env, newest-first, with `+N -M ~K` summaries. | shared |
+| `envroll diff <a> <b> [--mask]` | Key-level diff between any two refs. Values shown by default; `--mask` hides them. | shared |
 | `envroll get <KEY> [--from <env>]` | Print a single value to stdout (script-friendly, never masked). Exits 20 if missing. | shared |
 | `envroll set <KEY=value> [--in <env>]` | Set or update a single key. | exclusive |
 | `envroll copy <KEY> --from <a> --to <b>` | Copy a single key between envs. | exclusive |
 | `envroll exec <ref> -- <cmd> [args...]` | Run a command with the env's vars injected. Decrypts to memory only — no plaintext on disk. `--no-override` lets parent-shell vars win on key collision. | shared (released before child spawn) |
 | `envroll remote {set <url> \| show \| unset}` | Configure the optional sync remote. `set` validates the URL scheme but makes no network call. | varies |
 | `envroll sync` | Pull-then-push the vault git history. Refuses if the vault working tree is dirty. Refuses on divergence and tells you exactly how to resolve. | exclusive |
+| `envroll completions <bash\|zsh\|fish\|powershell\|elvish>` | Print a shell completion script to stdout. See the **Shell completions** section below for install paths. | none |
 
 **Global flags** (work on every subcommand): `--format <human|json>`, `--yes`, `--log <off|error|warn|info|debug>`, `--no-color` (also honors `NO_COLOR`), `--passphrase-stdin`, `--passphrase-env <NAME>`. The `--vault <path>` flag exists for testing only and is hidden from `--help`.
+
+---
+
+## Shell completions
+
+Get `<TAB>` completion for every subcommand and flag in your shell. Pick the one-liner for your shell, paste it once, restart your shell.
+
+### bash
+
+```bash
+# user-local (recommended)
+envroll completions bash > ~/.local/share/bash-completion/completions/envroll
+
+# system-wide on Homebrew macOS
+envroll completions bash | sudo tee /usr/local/etc/bash_completion.d/envroll
+```
+
+### zsh
+
+```zsh
+# user-local — make sure ~/.zsh/completions is on your $fpath
+mkdir -p ~/.zsh/completions
+envroll completions zsh > ~/.zsh/completions/_envroll
+echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+echo 'autoload -U compinit && compinit' >> ~/.zshrc
+
+# Homebrew macOS, system-wide
+envroll completions zsh | sudo tee /usr/local/share/zsh/site-functions/_envroll
+```
+
+### fish
+
+```fish
+envroll completions fish > ~/.config/fish/completions/envroll.fish
+```
+
+### powershell
+
+Add this line to your `$PROFILE` (run `notepad $PROFILE` to find it):
+
+```powershell
+envroll completions powershell | Out-String | Invoke-Expression
+```
+
+### elvish
+
+```elvish
+envroll completions elvish > ~/.config/elvish/lib/envroll-completions.elv
+```
+
+### What's not (yet) completed
+
+`envroll use <TAB>` does NOT yet complete env names — that would require running `envroll list` synchronously inside every TAB press, which needs the session-cache layer planned for v0.3. Subcommands and flags do complete.
+
+---
+
+## Importing existing `.env` files
+
+A new contributor typically arrives with a folder full of `.env.dev`, `.env.staging`, `.env.bak.2024`, etc. `envroll import` adopts each one as a vault env without making you shuffle files around.
+
+```bash
+# Adopt one file
+envroll import .env.dev --as dev
+
+# Bulk-import everything matching .env.*
+for f in .env.*; do
+  name=${f#.env.}
+  envroll import "$f" --as "$name"
+done
+
+# Source can be anywhere on disk — it's left untouched
+envroll import ~/Downloads/legacy-prod-secrets.env --as prod
+```
+
+What gets imported is the parsed key-value content. Comments, blank lines, and key ordering are NOT preserved (envroll commits the canonical key-value set, same semantics as `save`). After importing you can safely `rm` the source file — the encrypted copy in the vault is the authoritative one.
+
+If `<file>` won't parse as a valid `.env`, import refuses with **exit 12** before prompting for the passphrase. If `<name>` collides with an existing env, **exit 30** unless you pass `--force`.
+
+---
+
+## Exporting plaintext (anti-lock-in)
+
+`envroll export` is the deliberate, audited path to get plaintext OUT of the vault — for piping into a hosted secrets manager, driving `kubectl create secret`, or migrating off envroll entirely. Three formats:
+
+```bash
+# dotenv (default) — KEY="value" lines that round-trip through `envroll import`
+envroll export prod > prod.env
+
+# json — single object, perfect for AWS Secrets Manager
+envroll export prod --output json | \
+  aws secretsmanager put-secret-value \
+    --secret-id myapp/prod \
+    --secret-string file:///dev/stdin
+
+# kubernetes secret
+envroll export prod --output dotenv | \
+  kubectl create secret generic prod-env --from-env-file=/dev/stdin
+
+# eval into your current shell (testing only — leaks to `ps`)
+eval "$(envroll export dev --output shell)"
+
+# migrate AWAY from envroll
+for e in $(envroll list --format json | jq -r '.[0].envs[]'); do
+  envroll export "$e" > ".env.$e"
+done
+```
+
+Output is **never** masked. The whole point of the command is plaintext. If you want a paste-safe summary, use `envroll status --mask` or `envroll diff --mask` instead.
+
+The `shell` format uses POSIX single-quote escaping (the `'\''` trick), so values containing `$`, backticks, double-quotes, or newlines are safe to `eval`.
+
+---
+
+## Renaming keys across envs
+
+Refactoring helper. Renaming `DATABASE_URL` to `DB_URL` across `dev`, `staging`, `prod`, and `feature-x` used to be eight `envroll set` invocations plus making sure you remembered to delete the old key everywhere.
+
+```bash
+# Rename in the active env
+envroll rename-key DATABASE_URL DB_URL
+
+# Rename in a specific env
+envroll rename-key STRIPE_SK STRIPE_SECRET --in prod
+
+# Rename across every env that has the key (silently skips envs that don't)
+envroll rename-key DATABASE_URL DB_URL --all
+
+# Force overwrite if NEW already exists in some target env
+envroll rename-key DATABASE_URL DB_URL --all --force
+```
+
+One commit per affected env, with the message `rename-key OLD → NEW in <env> at <ts>`. Envs that don't contain `OLD` are skipped (no empty commits) and reported on stderr. Same `active_ref` refuse rule as `save` / `set` / `copy` — we won't silently rewind a historically-pinned env.
 
 ---
 

@@ -18,19 +18,23 @@ use crate::errors::EnvrollError;
 use crate::output::OutputFormat;
 
 pub mod common;
+pub mod completions;
 pub mod copy;
 pub mod current;
 pub mod diff;
 pub mod edit;
 pub mod exec;
+pub mod export;
 pub mod fork;
 pub mod get;
+pub mod import;
 pub mod init;
 pub mod list;
 pub mod log_cmd;
 pub mod projects;
 pub mod remote;
 pub mod rename;
+pub mod rename_key;
 pub mod rm;
 pub mod save;
 pub mod set;
@@ -165,6 +169,20 @@ pub enum Command {
 
     /// Pull-then-push the vault git history against the configured remote.
     Sync(sync::Args),
+
+    /// Print a shell completion script (bash/zsh/fish/powershell/elvish) to stdout.
+    Completions(completions::Args),
+
+    /// Adopt an existing `.env`-style file as a new env. Onboarding shortcut.
+    Import(import::Args),
+
+    /// Print an env's plaintext content to stdout (dotenv / json / shell).
+    /// Anti-lock-in escape hatch.
+    Export(export::Args),
+
+    /// Rename a key (e.g. DATABASE_URL → DB_URL) across one or every env.
+    #[command(name = "rename-key")]
+    RenameKey(rename_key::Args),
 }
 
 /// Resolved global context passed into every subcommand. Subcommands read
@@ -216,5 +234,9 @@ pub fn dispatch(cli: Cli) -> Result<(), EnvrollError> {
         Command::Exec(a) => exec::run(a, &ctx),
         Command::Remote(c) => remote::run(c, &ctx),
         Command::Sync(a) => sync::run(a, &ctx),
+        Command::Completions(a) => completions::run(a, &ctx),
+        Command::Import(a) => import::run(a, &ctx),
+        Command::Export(a) => export::run(a, &ctx),
+        Command::RenameKey(a) => rename_key::run(a, &ctx),
     }
 }
