@@ -1,13 +1,14 @@
 //! `envroll completions <shell>` — emit shell completion scripts to stdout.
 //!
 //! Powered by `clap_complete`. The subcommand prints to stdout so users can
-//! redirect into the appropriate file for their shell:
+//! redirect into the appropriate file for their shell. The paths below are
+//! the **convention** for each shell — they're already on the shell's
+//! completion search path, so no rc-file edits are needed:
 //!
 //! ```text
 //!   bash       → ~/.local/share/bash-completion/completions/envroll
-//!                /usr/local/etc/bash_completion.d/envroll          (Homebrew)
-//!   zsh        → ~/.zsh/completions/_envroll                       (custom $fpath)
-//!                /usr/local/share/zsh/site-functions/_envroll      (Homebrew)
+//!   zsh        → /usr/local/share/zsh/site-functions/_envroll      (Homebrew, needs sudo)
+//!                ~/.zsh/completions/_envroll                       (alternative — must be on $fpath yourself)
 //!   fish       → ~/.config/fish/completions/envroll.fish
 //!   powershell → $PROFILE                                          (eval'd inline)
 //!   elvish     → ~/.config/elvish/lib/envroll-completions.elv
@@ -52,13 +53,15 @@ impl From<CompletionShell> for Shell {
 
 /// Generate shell completion script for `<shell>` and print it to stdout.
 ///
-/// Install one-liners (paste into your shell init):
+/// Install one-liners — these target the CONVENTION path for each shell, so
+/// no rc-file edits are needed:
 ///
-///   # bash
+///   # bash (already on bash-completion's load path)
 ///   envroll completions bash > ~/.local/share/bash-completion/completions/envroll
 ///
-///   # zsh (with a `~/.zsh/completions` dir on $fpath)
-///   envroll completions zsh > ~/.zsh/completions/_envroll
+///   # zsh (Homebrew macOS — already on $fpath, needs sudo)
+///   envroll completions zsh | sudo tee /usr/local/share/zsh/site-functions/_envroll
+///   rm -f ~/.zcompdump* && exec zsh
 ///
 ///   # fish
 ///   envroll completions fish > ~/.config/fish/completions/envroll.fish
@@ -75,6 +78,11 @@ impl From<CompletionShell> for Shell {
 /// envs) is NOT supported in v0.1.x because it would require running
 /// `envroll list` synchronously inside every TAB press; that needs a
 /// daemon/cache layer planned for v0.3.
+///
+/// If completion still doesn't fire after install, run
+/// `echo $fpath | tr ' ' '\n'` (zsh) and confirm the target directory is
+/// listed. Custom paths like `~/.zsh/completions/` need to be added to
+/// `$fpath` in your `.zshrc` BEFORE `compinit` runs.
 #[derive(Debug, ClapArgs)]
 pub struct Args {
     /// Which shell to generate completions for.

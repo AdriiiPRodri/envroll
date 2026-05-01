@@ -214,54 +214,76 @@ The remote can be public, private, on-prem, or a directory mounted from a NAS. e
 
 ## Shell completions
 
-Get `<TAB>` completion for every subcommand and flag in your shell. Pick the one-liner for your shell, paste it once, restart your shell.
+Get `<TAB>` completion for every subcommand and flag. Each block below is a single copy-paste — it creates whatever directories are missing, writes the completion file, clears caches, and restarts your shell. After running it, `envroll <TAB>` should show every subcommand.
 
 ### bash
 
 ```bash
-# user-local (recommended)
-envroll completions bash > ~/.local/share/bash-completion/completions/envroll
-
-# system-wide on Homebrew macOS
-envroll completions bash | sudo tee /usr/local/etc/bash_completion.d/envroll
+mkdir -p ~/.local/share/bash-completion/completions \
+  && envroll completions bash > ~/.local/share/bash-completion/completions/envroll \
+  && exec bash
 ```
 
-### zsh
+### zsh (macOS / Linux with Homebrew zsh — recommended)
 
 ```zsh
-# user-local — make sure ~/.zsh/completions is on your $fpath
-mkdir -p ~/.zsh/completions
-envroll completions zsh > ~/.zsh/completions/_envroll
-echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
-echo 'autoload -U compinit && compinit' >> ~/.zshrc
-
-# Homebrew macOS, system-wide
-envroll completions zsh | sudo tee /usr/local/share/zsh/site-functions/_envroll
+sudo mkdir -p /usr/local/share/zsh/site-functions \
+  && envroll completions zsh | sudo tee /usr/local/share/zsh/site-functions/_envroll > /dev/null \
+  && rm -f ~/.zcompdump* \
+  && exec zsh
 ```
+
+> Why `sudo` and a system path? Because `/usr/local/share/zsh/site-functions/` is already on zsh's default `$fpath`, so completions load without any `.zshrc` change. This is the same convention `gh`, `rustup`, and `brew completions` use.
+
+### zsh (no sudo — user-local)
+
+```zsh
+mkdir -p ~/.zsh/completions \
+  && envroll completions zsh > ~/.zsh/completions/_envroll \
+  && grep -q "fpath=(~/.zsh/completions" ~/.zshrc 2>/dev/null \
+     || printf '\n# envroll completions\nfpath=(~/.zsh/completions $fpath)\nautoload -U compinit && compinit\n' >> ~/.zshrc \
+  && rm -f ~/.zcompdump* \
+  && exec zsh
+```
+
+This block also appends the `fpath` + `compinit` lines to your `.zshrc` (only the first time — the `grep` guard prevents duplicates).
 
 ### fish
 
 ```fish
+mkdir -p ~/.config/fish/completions
 envroll completions fish > ~/.config/fish/completions/envroll.fish
 ```
 
+(Fish loads new completion files automatically — no shell restart needed.)
+
 ### powershell
 
-Add this line to your `$PROFILE` (run `notepad $PROFILE` to find it):
+Add this line to your `$PROFILE`. Run `notepad $PROFILE` if you don't have one yet (PowerShell will offer to create it):
 
 ```powershell
 envroll completions powershell | Out-String | Invoke-Expression
 ```
 
+Then `. $PROFILE` to reload, or open a new shell.
+
 ### elvish
 
 ```elvish
+mkdir -p ~/.config/elvish/lib
 envroll completions elvish > ~/.config/elvish/lib/envroll-completions.elv
 ```
 
-### What's not (yet) completed
+### Troubleshooting
 
-`envroll use <TAB>` does NOT yet complete env names — that would require running `envroll list` synchronously inside every TAB press, which needs the session-cache layer planned for v0.3. Subcommands and flags do complete.
+**`envroll <TAB>` does nothing.** The completion file isn't being loaded. Most common causes:
+
+1. **You forgot to restart the shell.** The blocks above end with `exec zsh` / `exec bash` for a reason. If you skipped that, run it now.
+2. **The directory you wrote to isn't on `$fpath` (zsh) / not loaded by bash-completion.** Run `echo $fpath | tr ' ' '\n'` (zsh) and confirm the target directory shows up. If it doesn't, you wrote to a custom path without updating your shell's load path — easiest fix is to delete that file and re-run the recommended block above.
+3. **Stale completion cache (zsh).** Run `rm -f ~/.zcompdump* && exec zsh`.
+4. **Older `clap`-based completions cached for a previous version.** Same fix as 3.
+
+**`envroll use <TAB>` doesn't list my envs.** Correct, that's not supported in v0.1.x. It would require running `envroll list` synchronously inside every TAB press — too slow without the session-cache layer planned for v0.3. Subcommands and flags do complete.
 
 ---
 
