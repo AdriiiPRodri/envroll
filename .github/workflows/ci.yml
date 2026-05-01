@@ -1,0 +1,49 @@
+name: ci
+
+# Runs on every push to main and every PR. Catches the "did this PR break
+# the test suite or lints" question before a tag is pushed and the release
+# pipeline (.github/workflows/release.yml) starts spending CI minutes.
+#
+# Single Ubuntu runner because:
+# - the multi-platform matrix already runs in release.yml on every PR
+#   (cargo-dist's "plan" stage), so duplicating it here would just burn
+#   CI minutes for the same coverage;
+# - libgit2 is vendored by the git2 crate (no apt install needed);
+# - the unit + integration tests are pure Rust and don't depend on macOS-
+#   or Windows-specific behavior beyond what's already gated with `#[cfg]`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  test:
+    name: fmt + clippy + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: clippy -D warnings
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: test
+        # Default features only. The `perf` feature gates the 200ms-soak
+        # tests which need a release build to be meaningful — those run
+        # on a separate cadence (out of scope for PR gating).
+        run: cargo test
