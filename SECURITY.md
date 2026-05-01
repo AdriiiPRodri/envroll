@@ -58,9 +58,10 @@ violates the "envroll protects against" list above, leaks plaintext or
 passphrase material, or undermines the on-disk integrity guarantees — please
 report it privately rather than opening a public issue.
 
-**Email:** `security@envroll.dev` *(replace with the project's published
-security contact once the GitHub Security Advisories flow is enabled — until
-then, the maintainer's address in `Cargo.toml` is the canonical contact)*.
+**Email:** `adrianjpr@gmail.com`
+
+Or open a private security advisory on GitHub:
+<https://github.com/AdriiiPRodri/envroll/security/advisories/new>.
 
 What helps us triage quickly:
 
