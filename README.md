@@ -206,7 +206,7 @@ The remote can be public, private, on-prem, or a directory mounted from a NAS. e
 | `envroll exec <ref> -- <cmd> [args...]` | Run a command with the env's vars injected. Decrypts to memory only — no plaintext on disk. `--no-override` lets parent-shell vars win on key collision. | shared (released before child spawn) |
 | `envroll remote {set <url> \| show \| unset}` | Configure the optional sync remote. `set` validates the URL scheme but makes no network call. | varies |
 | `envroll sync` | Pull-then-push the vault git history. Refuses if the vault working tree is dirty. Refuses on divergence and tells you exactly how to resolve. | exclusive |
-| `envroll completions <bash\|zsh\|fish\|powershell\|elvish>` | Print a shell completion script to stdout. See the **Shell completions** section below for install paths. | none |
+| `envroll completions <bash\|zsh\|fish\|powershell\|elvish> [--install]` | With `--install`: write the completion file to its convention path and (idempotently) wire up the user's rc file. Without `--install`: print the script to stdout. See the **Shell completions** section below. | none |
 
 **Global flags** (work on every subcommand): `--format <human|json>`, `--yes`, `--log <off|error|warn|info|debug>`, `--no-color` (also honors `NO_COLOR`), `--passphrase-stdin`, `--passphrase-env <NAME>`. The `--vault <path>` flag exists for testing only and is hidden from `--help`.
 
@@ -214,76 +214,61 @@ The remote can be public, private, on-prem, or a directory mounted from a NAS. e
 
 ## Shell completions
 
-Get `<TAB>` completion for every subcommand and flag. Each block below is a single copy-paste — it creates whatever directories are missing, writes the completion file, clears caches, and restarts your shell. After running it, `envroll <TAB>` should show every subcommand.
-
-### bash
+Get `<TAB>` completion for every subcommand and flag. **Pick your shell, run one command, restart your shell.** No sudo, no manual edits.
 
 ```bash
-mkdir -p ~/.local/share/bash-completion/completions \
-  && envroll completions bash > ~/.local/share/bash-completion/completions/envroll \
-  && exec bash
+envroll completions bash --install        # bash
+envroll completions zsh --install         # zsh
+envroll completions fish --install        # fish
+envroll completions powershell --install  # powershell
+envroll completions elvish --install      # elvish
 ```
 
-### zsh (macOS / Linux with Homebrew zsh — recommended)
+`--install` figures out the right user-local path for your shell, creates whatever directories are missing, writes the completion file, and (for shells that need it) appends a small marker-guarded block to your shell's rc file so completion loads on next shell start. **Re-running is safe** — the rc append is idempotent (we don't double-add).
 
-```zsh
-sudo mkdir -p /usr/local/share/zsh/site-functions \
-  && envroll completions zsh | sudo tee /usr/local/share/zsh/site-functions/_envroll > /dev/null \
-  && rm -f ~/.zcompdump* \
-  && exec zsh
+After installing, the command tells you exactly how to activate now:
+
+```text
+$ envroll completions zsh --install
+✓ wrote completion file: /Users/you/.zsh/completions/_envroll
+✓ added marker block to /Users/you/.zshrc
+
+To activate now: rm -f ~/.zcompdump* && exec zsh
 ```
 
-> Why `sudo` and a system path? Because `/usr/local/share/zsh/site-functions/` is already on zsh's default `$fpath`, so completions load without any `.zshrc` change. This is the same convention `gh`, `rustup`, and `brew completions` use.
+That's it. `envroll <TAB>` should show every subcommand on the next shell.
 
-### zsh (no sudo — user-local)
+### Where things land
 
-```zsh
-mkdir -p ~/.zsh/completions \
-  && envroll completions zsh > ~/.zsh/completions/_envroll \
-  && grep -q "fpath=(~/.zsh/completions" ~/.zshrc 2>/dev/null \
-     || printf '\n# envroll completions\nfpath=(~/.zsh/completions $fpath)\nautoload -U compinit && compinit\n' >> ~/.zshrc \
-  && rm -f ~/.zcompdump* \
-  && exec zsh
-```
+| Shell      | Completion file                                           | rc edit                                       |
+| ---------- | --------------------------------------------------------- | --------------------------------------------- |
+| bash       | `~/.local/share/bash-completion/completions/envroll`      | none (bash-completion auto-scans this dir)    |
+| zsh        | `~/.zsh/completions/_envroll`                             | `~/.zshrc` (fpath + compinit, marker-guarded) |
+| fish       | `~/.config/fish/completions/envroll.fish`                 | none (fish auto-loads)                        |
+| powershell | `~/.config/powershell/envroll-completions.ps1` *(Unix-ish)*<br>`Documents/PowerShell/envroll-completions.ps1` *(Windows)* | `Microsoft.PowerShell_profile.ps1` (dot-source, marker-guarded) |
+| elvish     | `~/.config/elvish/lib/envroll-completions.elv`            | `~/.config/elvish/rc.elv` (`use` line, marker-guarded) |
 
-This block also appends the `fpath` + `compinit` lines to your `.zshrc` (only the first time — the `grep` guard prevents duplicates).
+### If `--install` doesn't fit your setup
 
-### fish
+Drop `--install` and the script goes to stdout — wire it up however you like:
 
-```fish
-mkdir -p ~/.config/fish/completions
-envroll completions fish > ~/.config/fish/completions/envroll.fish
-```
+```bash
+# Custom path (e.g., a system-wide Homebrew zsh install):
+envroll completions zsh | sudo tee /usr/local/share/zsh/site-functions/_envroll > /dev/null
 
-(Fish loads new completion files automatically — no shell restart needed.)
-
-### powershell
-
-Add this line to your `$PROFILE`. Run `notepad $PROFILE` if you don't have one yet (PowerShell will offer to create it):
-
-```powershell
+# Or pipe straight into PowerShell on the spot:
 envroll completions powershell | Out-String | Invoke-Expression
-```
-
-Then `. $PROFILE` to reload, or open a new shell.
-
-### elvish
-
-```elvish
-mkdir -p ~/.config/elvish/lib
-envroll completions elvish > ~/.config/elvish/lib/envroll-completions.elv
 ```
 
 ### Troubleshooting
 
-**`envroll <TAB>` does nothing.** The completion file isn't being loaded. Most common causes:
+**`envroll <TAB>` does nothing.** The most common causes:
 
-1. **You forgot to restart the shell.** The blocks above end with `exec zsh` / `exec bash` for a reason. If you skipped that, run it now.
-2. **The directory you wrote to isn't on `$fpath` (zsh) / not loaded by bash-completion.** Run `echo $fpath | tr ' ' '\n'` (zsh) and confirm the target directory shows up. If it doesn't, you wrote to a custom path without updating your shell's load path — easiest fix is to delete that file and re-run the recommended block above.
-3. **Stale completion cache (zsh).** Run `rm -f ~/.zcompdump* && exec zsh`.
-4. **Older `clap`-based completions cached for a previous version.** Same fix as 3.
+1. **You forgot to restart the shell.** Use the activation hint that `--install` printed (e.g., `exec zsh` or `. $PROFILE`).
+2. **Stale completion cache (zsh).** `rm -f ~/.zcompdump* && exec zsh`.
+3. **You used the manual (no-`--install`) path with a custom directory** that isn't on your shell's load path. Run `echo $fpath | tr ' ' '\n'` (zsh) and confirm the directory is listed; if it isn't, easier to just re-run with `--install`.
 
-**`envroll use <TAB>` doesn't list my envs.** Correct, that's not supported in v0.1.x. It would require running `envroll list` synchronously inside every TAB press — too slow without the session-cache layer planned for v0.3. Subcommands and flags do complete.
+**`envroll use <TAB>` doesn't list my envs.** Correct, not supported in v0.1.x. It would require running `envroll list` synchronously inside every TAB press — too slow without the session-cache layer planned for v0.3. Subcommands and flags do complete.
 
 ---
 
