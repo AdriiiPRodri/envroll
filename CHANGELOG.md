@@ -8,6 +8,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 under each `## [VERSION]` heading becomes the GitHub release notes for
 that tag. Keep entries user-facing.
 
+## [0.2.1] - 2026-05-02
+
+### Changed
+
+- **README now embeds a programmatic VHS-recorded demo** (~80 seconds)
+  covering `init`, `fork`, `set`, `save`, `use`, `exec`, `diff`, `log`,
+  and `list`. Click the GIF to open the MP4 with pause/scrub controls.
+  Source tape lives at `docs/demo.tape`; regenerate with
+  `vhs docs/demo.tape`.
+- **Releases auto-publish to crates.io** on every `vN.M.P` tag push —
+  no more manual `cargo publish`. The new
+  `.github/workflows/publish-crates.yml` workflow runs in parallel with
+  cargo-dist's release pipeline and validates that the tag matches
+  `Cargo.toml`'s `version` field before publishing, so a mismatch fails
+  loudly instead of silently shipping the wrong version.
+
 ## [0.2.0] - 2026-05-01
 
 ### Added
@@ -195,6 +211,7 @@ no SaaS, no daemon.
   design.
 - macOS aarch64 binary (Linux + Windows added in 0.1.1).
 
+[0.2.1]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.1
 [0.2.0]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.0
 [0.1.5]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.5
 [0.1.4]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.4
