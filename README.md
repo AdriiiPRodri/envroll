@@ -125,7 +125,7 @@ envroll passphrase: ********
 confirm: ********
 
   Vault created at ~/.local/share/envroll
-  Project registered as remote-3a1b9c8d4e5f6a7b
+  Project registered as testrepo
 
   IMPORTANT: write your passphrase down somewhere safe.
   If you lose it, every env in this vault is gone forever.
@@ -368,7 +368,7 @@ One commit per affected env, with the message `rename-key OLD → NEW in <env> a
 ├── .canary.age                    "is the passphrase right?" sentinel
 ├── .envroll-version               on-disk schema pin
 └── projects/
-    └── remote-3a1b9c8d4e5f6a7b/
+    └── testrepo/
         ├── manifest.toml          project state (active env, etc.)
         ├── envs/
         │   ├── dev.age            ← what gets synced
