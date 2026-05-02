@@ -3,7 +3,7 @@
 This document is the canonical statement of envroll's threat model and the
 vulnerability disclosure process. The threat-model text below is reproduced
 verbatim in the README's "What envroll does and does not protect against"
-section so it's the first thing every new user sees — but if you're reading
+section so it's the first thing every new user sees. But if you're reading
 the source, this is the file to start with.
 
 ## Threat model
@@ -12,7 +12,7 @@ the source, this is the file to start with.
 
 - A passive attacker who reads the configured vault remote (public GitHub repo, leaky S3 bucket, accidental tweet of the URL). All env contents are age-encrypted; without the passphrase the attacker sees only ciphertext + commit metadata (timestamps, commit messages, env *names*).
 - A lost or stolen laptop **with full-disk encryption enabled and locked**. Vault content is still encrypted at the envroll layer, so even if FDE is later defeated the attacker still needs the passphrase.
-- Casual `.env` exposure in chat, screenshots, screen-shares, or tickets — provided the user pasted the *encrypted* `.age` file, not the plaintext checkout. envroll cannot prevent users from pasting plaintext.
+- Casual `.env` exposure in chat, screenshots, screen-shares, or tickets, provided the user pasted the *encrypted* `.age` file, not the plaintext checkout. envroll cannot prevent users from pasting plaintext.
 - Unauthorized writes to the vault remote: age messages have a built-in HMAC, so any tampered ciphertext fails to decrypt with `file corrupt or tampered`.
 
 ### envroll does NOT protect against
@@ -28,7 +28,7 @@ the source, this is the file to start with.
 ## Cryptography
 
 - **Algorithm.** [age](https://github.com/FiloSottile/age) in `scrypt::Recipient` / `scrypt::Identity` mode. The on-disk format is binary age v1 (the wire format declared by `<vault>/.envroll-version = "1"`).
-- **Work factor.** `age` crate default — currently calibrated to ~1 second per derivation on commodity hardware. Not user-tunable in v0.1.
+- **Work factor.** `age` crate default, currently calibrated to ~1 second per derivation on commodity hardware. Not user-tunable in v0.1.
 - **Authenticity.** age messages carry a per-message HMAC. Any modification to a `.age` file (single bit, swapped header, truncated tail) fails decryption with `file corrupt`. Exit code 11.
 - **Passphrase handling in process memory.** Passphrases are held only in `secrecy::SecretString`. They are never `.clone()`-ed into a `String`, never written to disk, never logged, never displayed. `SecretString` zeroizes its bytes on drop.
 - **No key material on disk.** envroll stores no key file, no recovery key, no wrapped passphrase. The only key is the one in your head (and in your password manager).
@@ -40,7 +40,7 @@ the source, this is the file to start with.
 - Plaintext metadata (`manifest.toml`, `.gitignore`, `.envroll-version`): mode `0644`.
 - Atomic writes everywhere: tempfile-in-same-directory + `fsync` + `rename` + parent `fsync`. An interrupted write leaves the destination unchanged; the orphan tempfile is reaped on the next vault-locking command.
 - `.checkout/` is in the vault's `.gitignore` and is **never** committed. A test in `tests/env_switching.rs::sync_never_includes_checkout_in_commits` walks every commit pushed to a remote and asserts no `.checkout/` path is present.
-- Plaintext only ever leaves the project-scoped `.checkout/` directory through three deliberate routes: a symlink at `./.env` (default), a copy at `./.env` (copy-mode), or as an environment variable injected into a child process via `envroll exec` (in-memory only — never on disk).
+- Plaintext only ever leaves the project-scoped `.checkout/` directory through three deliberate routes: a symlink at `./.env` (default), a copy at `./.env` (copy-mode), or as an environment variable injected into a child process via `envroll exec` (in-memory only, never on disk).
 
 ## What envroll prints, and where
 
@@ -65,7 +65,7 @@ ENVROLL_PASSPHRASE=<your demo vault's passphrase>
 When active, the interactive `rpassword` prompt is replaced by a visible
 animation: the prompt label appears (`envroll passphrase:`), pauses
 briefly, then 8 bullet glyphs (`•`) type out one at a time. The
-passphrase actually used is `$ENVROLL_PASSPHRASE` — the bullets are
+passphrase actually used is `$ENVROLL_PASSPHRASE`. The bullets are
 purely cosmetic and the bytes printed are literally the `•` glyph.
 
 ### What demo mode does NOT change
@@ -76,7 +76,7 @@ purely cosmetic and the bytes printed are literally the `•` glyph.
   fails with `EnvrollError::WrongPassphrase` (exit 10) just like in
   normal mode.
 - **No new logging surface.** The actual passphrase bytes never reach
-  the terminal, stdout, stderr, or any logger — only the `•` bullets
+  the terminal, stdout, stderr, or any logger. Only the `•` bullets
   do.
 - **No new attack surface.** The animation reads from an env var, which
   was already a supported (and documented) passphrase source. Demo mode
@@ -99,14 +99,14 @@ purely cosmetic and the bytes printed are literally the `•` glyph.
 Keeping demo mode in `main` instead of a fork means demos exercise the
 same passphrase code path that real users hit, modulo the prompt
 animation. A fork would drift over time and quietly stop being
-representative. The full implementation is in `src/prompt.rs` — search
+representative. The full implementation is in `src/prompt.rs`; search
 for `DEMO_MODE_ENV`.
 
 ## Reporting a vulnerability
 
-If you believe you've found a security issue in envroll — anything that
+If you believe you've found a security issue in envroll (anything that
 violates the "envroll protects against" list above, leaks plaintext or
-passphrase material, or undermines the on-disk integrity guarantees — please
+passphrase material, or undermines the on-disk integrity guarantees), please
 report it privately rather than opening a public issue.
 
 **Email:** `adrianjpr@gmail.com`
@@ -133,15 +133,15 @@ a documented mitigation within **30 days** for high-severity issues.
 The following are deliberately not vulnerabilities (they're documented
 limitations or accepted v0.1 trade-offs):
 
-- "An attacker with root on my laptop can read `.checkout/<env>`." Yes — the
-  threat model excludes active local attackers.
-- "If I forget my passphrase, I can't recover my envs." Yes — that's the
+- "An attacker with root on my laptop can read `.checkout/<env>`." Yes,
+  the threat model excludes active local attackers.
+- "If I forget my passphrase, I can't recover my envs." Yes, that's the
   single security guarantee the entire design is anchored to.
-- "Concurrent `envroll set` calls from two terminals can interleave." Yes —
+- "Concurrent `envroll set` calls from two terminals can interleave." Yes,
   v0.1 has a vault-wide advisory lock, not per-env locks. v0.2 may revisit.
-- "Pushing the vault to a public repo leaks env names and timestamps." Yes —
+- "Pushing the vault to a public repo leaks env names and timestamps." Yes,
   the threat model says exactly this; a passive attacker sees ciphertext and
   commit metadata. If env names are themselves sensitive, don't sync.
 
 If you're not sure whether something is in scope, err on the side of
-reporting it — we'd rather triage a non-issue than miss a real one.
+reporting it. We'd rather triage a non-issue than miss a real one.

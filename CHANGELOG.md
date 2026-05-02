@@ -4,7 +4,7 @@ All notable changes to envroll are recorded here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-`cargo-dist` reads this file during the release pipeline — the section
+`cargo-dist` reads this file during the release pipeline. The section
 under each `## [VERSION]` heading becomes the GitHub release notes for
 that tag. Keep entries user-facing.
 
@@ -17,7 +17,7 @@ that tag. Keep entries user-facing.
   and `list`. Click the GIF to open the MP4 with pause/scrub controls.
   Source tape lives at `docs/demo.tape`; regenerate with
   `vhs docs/demo.tape`.
-- **Releases auto-publish to crates.io** on every `vN.M.P` tag push —
+- **Releases auto-publish to crates.io** on every `vN.M.P` tag push:
   no more manual `cargo publish`. The new
   `.github/workflows/publish-crates.yml` workflow runs in parallel with
   cargo-dist's release pipeline and validates that the tag matches
@@ -29,7 +29,7 @@ that tag. Keep entries user-facing.
 ### Added
 
 - **envroll is now on crates.io.** Install with `cargo install envroll`
-  from any machine that has a Rust toolchain — no need to grab a
+  from any machine that has a Rust toolchain. No need to grab a
   prebuilt binary or build from source. The published crate ships the
   same `envroll` binary the GitHub Releases pipeline produces.
 
@@ -45,7 +45,7 @@ that tag. Keep entries user-facing.
   by release version. The old `tests/v0_1_3_features.rs` (which had
   already grown past v0.1.3 with v0.1.4's `--install` tests) is split
   into `tests/completions.rs`, `tests/import_export.rs`, and
-  `tests/rename_key.rs`. No behavioral change — same 27 tests, same
+  `tests/rename_key.rs`. No behavioral change: same 27 tests, same
   coverage.
 
 ### Note on versioning policy
@@ -54,7 +54,7 @@ This is the first release that follows the semver policy correctly for
 a `0.x` crate: **new features get a MINOR bump**, not a PATCH. The
 0.1.0 → 0.1.5 history shipped multiple feature releases as patches
 (basename project IDs, `--target`, completions, import/export,
-rename-key, `--install`) — those tags stay as published, but every
+rename-key, `--install`). Those tags stay as published, but every
 release from here on gets the right bump. Bug-fix-only releases will
 be `0.2.x`; the next batch of features will be `0.3.0`.
 
@@ -66,7 +66,7 @@ be `0.2.x`; the next batch of features will be `0.3.0`.
   remote get-url origin` is configured. `git@github.com:acme/myapp.git`
   registers as `myapp` instead of the old `remote-3a1b9c8d4e5f6a7b`. As
   a side effect, **multiple worktrees of the same repo now share their
-  envs automatically** — they all derive the same basename, so they all
+  envs automatically**: they all derive the same basename, so they all
   point to the same vault entry. The old hash-prefixed format
   (`remote-<16hex>`) is gone for new projects; the full normalized URL is
   still persisted in the manifest's `id_input` field, so the rare
@@ -80,7 +80,7 @@ be `0.2.x`; the next batch of features will be `0.3.0`.
 
 ### Migration note
 
-Pre-0.1.5 projects with `remote-<hash>` IDs keep working as-is — the ID
+Pre-0.1.5 projects with `remote-<hash>` IDs keep working as-is. The ID
 is recorded in the manifest, not re-derived from the URL on every
 command. To get the new pretty name on an existing project, either:
 
@@ -94,12 +94,12 @@ command. To get the new pretty name on an existing project, either:
 
 ### Added
 
-- **`envroll completions <shell> --install`** — one command that figures
+- **`envroll completions <shell> --install`**: one command that figures
   out the convention path for your shell, creates whatever directories
   are missing, writes the completion file, and (for shells that need it)
   appends a marker-guarded block to your shell's rc file so completion
   loads on next shell start. No sudo, no manual `.zshrc` editing.
-  Idempotent — re-running doesn't duplicate anything.
+  Idempotent: re-running doesn't duplicate anything.
   - Supported shells: bash, zsh, fish, powershell, elvish.
   - The plain `envroll completions <shell>` form (print-to-stdout) still
     works for CI / container builds / users who want to wire it manually.
@@ -113,7 +113,7 @@ command. To get the new pretty name on an existing project, either:
 ### Fixed
 
 - Documentation no longer assumed `/usr/local/share/zsh/site-functions/`
-  exists by default — most fresh macOS installs don't have it. The
+  exists by default. Most fresh macOS installs don't have it. The
   `--install` flow uses `~/.zsh/completions/` instead and creates the
   directory as needed.
 
@@ -121,22 +121,22 @@ command. To get the new pretty name on an existing project, either:
 
 ### Added
 
-- **`envroll completions <shell>`** — print bash / zsh / fish /
+- **`envroll completions <shell>`**: print bash / zsh / fish /
   powershell / elvish completion scripts to stdout. (See 0.1.4 for the
   one-command install variant.)
-- **`envroll import <file> --as <name>`** — adopt an existing
+- **`envroll import <file> --as <name>`**: adopt an existing
   `.env`-style file lying around on disk as a new env in the current
   project. Onboarding accelerator: when a new contributor arrives with
   five legacy `.env.dev` / `.env.staging` / `.env.bak.2024` files, they
   can now `for f in .env.*; do envroll import "$f" --as "${f#.env.}"; done`
   instead of shuffling files in and out of `./.env`.
-- **`envroll export <env> [--output dotenv|json|shell]`** —
+- **`envroll export <env> [--output dotenv|json|shell]`**:
   anti-lock-in escape hatch. Decrypts a single env to stdout in one of
-  three formats: `dotenv` (the default — round-trips through `import`),
+  three formats: `dotenv` (the default, round-trips through `import`),
   `json` (single object, ready to pipe into AWS Secrets Manager), or
   `shell` (POSIX-safe `export KEY='...'` lines, eval-able). Never
   masked.
-- **`envroll rename-key OLD NEW [--in <env> | --all] [--force]`** —
+- **`envroll rename-key OLD NEW [--in <env> | --all] [--force]`**:
   rename a key (e.g. `DATABASE_URL` → `DB_URL`) across one or every env
   in the project. Skips envs that don't contain `OLD`; refuses on
   collisions unless `--force`.
@@ -151,7 +151,7 @@ command. To get the new pretty name on an existing project, either:
 
 ### Added
 
-- **`envroll init --target <filename>`** — register a project with a
+- **`envroll init --target <filename>`**: register a project with a
   non-default working-copy filename. Designed for modern JS frameworks
   that read from `.env.local` (Next.js, Vite, Astro, Remix, Nuxt) or any
   other custom path (`application.env` for Spring Boot, `config/.env`
@@ -168,7 +168,7 @@ command. To get the new pretty name on an existing project, either:
 ### Fixed
 
 - Manifests created by 0.1.0 / 0.1.1 (which didn't have the field) are
-  fully backwards-compatible — serde defaults the field to `.env` so
+  fully backwards-compatible: serde defaults the field to `.env` so
   existing vaults keep working.
 
 ## [0.1.1] - 2026-05-01
@@ -180,7 +180,7 @@ command. To get the new pretty name on an existing project, either:
   - `aarch64-apple-darwin` (macOS Apple Silicon)
   - `x86_64-apple-darwin` (macOS Intel)
   - `aarch64-unknown-linux-gnu` (Linux ARM, e.g., Raspberry Pi 4+)
-  - `x86_64-unknown-linux-gnu` (Linux Intel/AMD — the common one)
+  - `x86_64-unknown-linux-gnu` (Linux Intel/AMD, the common one)
   - `x86_64-pc-windows-msvc` (Windows)
 - **Curl / iwr installers** auto-generated by cargo-dist:
   - `curl -LsSf https://github.com/AdriiiPRodri/envroll/releases/download/v0.1.1/envroll-installer.sh | sh`
@@ -191,7 +191,7 @@ command. To get the new pretty name on an existing project, either:
 ## [0.1.0] - 2026-05-01
 
 First public release. Single statically-linked Rust binary that
-versions, switches, and encrypts environment variables — local-first,
+versions, switches, and encrypts environment variables. Local-first,
 no SaaS, no daemon.
 
 ### Added
@@ -199,7 +199,7 @@ no SaaS, no daemon.
 - **Vault model**: encrypted age-scrypt blobs versioned via libgit2,
   living outside the project repo at `~/.local/share/envroll/`.
 - **Atomic env activation**: `envroll use staging` is a tempfile +
-  rename of `./.env`'s symlink target — never half-written.
+  rename of `./.env`'s symlink target. Never half-written.
 - **Core verbs**: `init`, `projects`, `list` (`ls`), `current`, `fork`,
   `save`, `use`, `status`, `rename`, `rm`, `edit`, `log`, `diff`,
   `get`, `set`, `copy`, `exec`, `remote {set,show,unset}`, `sync`.
@@ -207,7 +207,7 @@ no SaaS, no daemon.
 - **`--format json`** output on every read command, with stable schemas
   documented under `docs/json-schemas/`.
 - **Threat model + recovery matrix** documented verbatim in
-  `SECURITY.md` and the README — passphrase loss = no recovery, by
+  `SECURITY.md` and the README. Passphrase loss = no recovery, by
   design.
 - macOS aarch64 binary (Linux + Windows added in 0.1.1).
 
