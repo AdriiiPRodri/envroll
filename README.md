@@ -88,7 +88,7 @@ That's `envroll`.
                                                  │  optional, opt-in
                                                  ▼
                                        any git remote you own
-                                  (encrypted, safe even if public)
+                                  (encrypted, "safe" even if public (don't do it pls)
 ```
 
 ---
