@@ -99,7 +99,7 @@ That's `envroll`.
 # crates.io (always the latest stable)
 cargo install envroll
 
-# Homebrew (macOS / Linux)
+# Homebrew (macOS / Linux) (Coming soon)
 brew install AdriiiPRodri/tap/envroll
 
 # Prebuilt binaries (macOS, Linux, Windows)
