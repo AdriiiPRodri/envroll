@@ -207,7 +207,7 @@ impl IdDerivation {
 /// 2. Normalized `git remote get-url origin` if a libgit2 repo is discoverable
 ///    upward from `cwd` and an `origin` remote with a non-empty URL is set.
 ///    The ID is the **sanitized basename of the URL** (e.g.,
-///    `git@github.com:acme/prowler.git` → `prowler`). All worktrees of the
+///    `git@github.com:acme/myapp.git` → `myapp`). All worktrees of the
 ///    same repo share an ID and therefore the same envs. The full normalized
 ///    URL is persisted in the manifest's `id_input` so `find_project_for_cwd`
 ///    can detect the rare collision between two unrelated repos that happen

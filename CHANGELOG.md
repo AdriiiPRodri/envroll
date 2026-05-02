@@ -63,15 +63,15 @@ be `0.2.x`; the next batch of features will be `0.3.0`.
 ### Changed
 
 - **Project IDs are now the human-readable repo basename** when a `git
-  remote get-url origin` is configured. `git@github.com:acme/prowler.git`
-  registers as `prowler` instead of the old `remote-3a1b9c8d4e5f6a7b`. As
+  remote get-url origin` is configured. `git@github.com:acme/myapp.git`
+  registers as `myapp` instead of the old `remote-3a1b9c8d4e5f6a7b`. As
   a side effect, **multiple worktrees of the same repo now share their
   envs automatically** — they all derive the same basename, so they all
   point to the same vault entry. The old hash-prefixed format
   (`remote-<16hex>`) is gone for new projects; the full normalized URL is
   still persisted in the manifest's `id_input` field, so the rare
   collision between two unrelated repos that share a basename
-  (`acme/prowler` vs `other/prowler`) is detected and refused with a
+  (`acme/myapp` vs `other/myapp`) is detected and refused with a
   clear `--id <custom>` hint.
 - Repo basenames are filtered through a filesystem-safe sanitizer:
   lowercase ASCII alphanumerics, dashes, and underscores survive verbatim;
