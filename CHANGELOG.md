@@ -8,6 +8,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 under each `## [VERSION]` heading becomes the GitHub release notes for
 that tag. Keep entries user-facing.
 
+## [0.2.2] - 2026-05-04
+
+### Fixed
+
+- **Unquoted multi-word values in `.env` files are now accepted on read.**
+  Files routine in python-dotenv / Django setups, e.g.
+  `DEFAULT_FROM_EMAIL=Display Name <a@b.com>`, used to fail with
+  `parse error: ... error at line index: N` because `dotenvy` rejects
+  whitespace inside unquoted values. envroll now applies a small
+  tolerance pre-pass that auto-quotes such values with the four standard
+  escapes (`\\`, `\"`, `\$`, `\n`) before handing the buffer to
+  `dotenvy`. Already-quoted values, comments, and lines inside an open
+  multi-line quoted block are passed through verbatim. The serializer
+  still emits canonical `KEY="value"` form, so the in-vault bytes are
+  unchanged.
+
 ## [0.2.1] - 2026-05-02
 
 ### Changed
@@ -211,6 +227,7 @@ no SaaS, no daemon.
   design.
 - macOS aarch64 binary (Linux + Windows added in 0.1.1).
 
+[0.2.2]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.2
 [0.2.1]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.1
 [0.2.0]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.0
 [0.1.5]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.1.5
