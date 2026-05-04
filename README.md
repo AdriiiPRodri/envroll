@@ -88,7 +88,7 @@ That's `envroll`.
                                                  │  optional, opt-in
                                                  ▼
                                        any git remote you own
-                                  (encrypted, safe even if public)
+                                  (encrypted, "safe" even if public (don't do it pls)
 ```
 
 ---
@@ -99,7 +99,7 @@ That's `envroll`.
 # crates.io (always the latest stable)
 cargo install envroll
 
-# Homebrew (macOS / Linux)
+# Homebrew (macOS / Linux) (Coming soon)
 brew install AdriiiPRodri/tap/envroll
 
 # Prebuilt binaries (macOS, Linux, Windows)
