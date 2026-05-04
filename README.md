@@ -404,13 +404,14 @@ Encryption is [age](https://github.com/FiloSottile/age) in scrypt-passphrase mod
 
 ## Supported `.env` syntax
 
-envroll **does not roll its own `.env` parser**. Every read goes through the [`dotenvy`](https://crates.io/crates/dotenvy) crate, which is the most actively maintained `.env` parser in the Rust ecosystem and the de-facto reference for `.env` semantics in Rust services.
+envroll delegates the heavy lifting to the [`dotenvy`](https://crates.io/crates/dotenvy) crate, the most actively maintained `.env` parser in the Rust ecosystem and the de-facto reference for `.env` semantics in Rust services. On read, envroll applies a small tolerance pre-pass so it accepts the unquoted multi-word values that python-dotenv / Django-style files routinely contain. The serializer always re-emits canonical `KEY="value"` form, so the in-vault bytes are a strict subset of what `dotenvy` parses.
 
 What's reliably supported:
 
 - `KEY=value` and `export KEY=value` (the `export ` prefix is stripped on parse).
 - Whitespace around `=` is ignored on the input side. Emitted output is canonical (`KEY="value"`).
 - Single- and double-quoted values; the four standard escapes `\\`, `\"`, `\$`, and `\n` inside double-quoted values.
+- Unquoted multi-word values such as `DEFAULT_FROM_EMAIL=Display Name <a@b.com>` are auto-quoted on read with the same four escapes, so the literal text round-trips through the vault. Lines that are already quoted, are comments, or sit inside an open multi-line quoted block are passed through untouched.
 - Empty values: `EMPTY=` is parsed as an empty string.
 - Multi-line values inside double quotes (use `\n` as the line break).
 - Comments starting with `#` on their own line, and trailing comments after a value.
