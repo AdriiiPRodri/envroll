@@ -7,7 +7,7 @@ A single statically-linked Rust binary that versions, switches, and encrypts env
   <a href="https://crates.io/crates/envroll"><img src="https://img.shields.io/crates/v/envroll.svg" alt="crates.io"></a>
   <a href="https://github.com/AdriiiPRodri/envroll/actions"><img src="https://img.shields.io/github/actions/workflow/status/AdriiiPRodri/envroll/ci.yml?branch=main" alt="CI"></a>
   <a href="https://github.com/AdriiiPRodri/envroll/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
-  <img src="https://img.shields.io/badge/rust-1.89%2B-orange.svg" alt="Rust 1.89+">
+  <img src="https://img.shields.io/badge/rust-1.95%2B-orange.svg" alt="Rust 1.95+">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg" alt="Platforms">
 </p>
 

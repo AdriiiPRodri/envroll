@@ -1,8 +1,8 @@
 [package]
 name = "envroll"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
-rust-version = "1.89"
+rust-version = "1.95.0"
 description = "git for your .env files — local-first, encrypted, single-binary environment manager"
 authors = ["Adrián Peña"]
 license = "MIT"

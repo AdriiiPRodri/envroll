@@ -8,6 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 under each `## [VERSION]` heading becomes the GitHub release notes for
 that tag. Keep entries user-facing.
 
+## [0.3.1] - 2026-05-05
+
+### Changed
+
+- **MSRV bumped from 1.89 to 1.95.0.** envroll's release pipeline and
+  `publish-crates` workflow already build with `dtolnay/rust-toolchain@stable`
+  (currently 1.95), so this just aligns the declared `rust-version` in
+  `Cargo.toml` with what we actually compile against. The user-visible
+  effect is on `cargo install envroll` from source: cargo's MSRV-aware
+  resolver can now pick the newest patch within each dependency's same
+  minor (e.g. `generic-array 0.14.9` instead of `0.14.7`) without spamming
+  `(available: ...)` notices. Pre-built binaries (cargo-dist) are
+  unaffected. README badge updated to `rust 1.95+`.
+
 ## [0.3.0] - 2026-05-05
 
 ### Changed
@@ -247,6 +261,7 @@ no SaaS, no daemon.
   design.
 - macOS aarch64 binary (Linux + Windows added in 0.1.1).
 
+[0.3.1]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.3.1
 [0.3.0]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.3.0
 [0.2.2]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.2
 [0.2.1]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.1
