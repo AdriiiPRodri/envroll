@@ -8,6 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 under each `## [VERSION]` heading becomes the GitHub release notes for
 that tag. Keep entries user-facing.
 
+## [0.3.0] - 2026-05-05
+
+### Changed
+
+- **`envroll save` now persists comment-only edits and any other
+  byte-level change to the working copy.** Previously `save` compared
+  the parsed key-value map of the working copy against the env's last
+  commit and printed `envroll: nothing to save` whenever only comments,
+  blank lines, or key order had changed, so adding a documentation
+  comment and running `save` silently dropped the edit. The new
+  comparator is byte equality against the decrypted plaintext of the
+  tip, so any difference (added comment, blank line tweak, key
+  reordering, value change) produces a real commit whose plaintext
+  preserves your edit verbatim. The blob has always stored the working
+  copy bytes as-is, so this only changes the no-op detection rule and
+  matches what users intuitively expect when they edit `.env` and run
+  `envroll save`. Editor quirks like auto-added trailing newlines or
+  line-ending normalization will produce a one-shot commit on first
+  save and stabilize from there.
+
 ## [0.2.2] - 2026-05-04
 
 ### Fixed
@@ -227,6 +247,7 @@ no SaaS, no daemon.
   design.
 - macOS aarch64 binary (Linux + Windows added in 0.1.1).
 
+[0.3.0]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.3.0
 [0.2.2]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.2
 [0.2.1]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.1
 [0.2.0]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.0

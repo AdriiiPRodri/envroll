@@ -146,6 +146,45 @@ fn save_unchanged_working_copy_prints_nothing_to_save() {
 }
 
 #[test]
+fn save_persists_comment_only_change() {
+    // Adding a comment is a real change: save MUST commit it (the blob
+    // stores the working copy verbatim) instead of treating it as a no-op.
+    let (cwd, xdg) = sandbox();
+    init(cwd.path(), xdg.path(), "p");
+    std::fs::write(cwd.path().join(".env"), b"A=1\n").unwrap();
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["fork", "dev"])
+        .assert()
+        .success();
+
+    // Append a comment via the symlink target (./.env is a symlink to the
+    // checkout file after fork; same path the user's editor would touch).
+    let vault = vault_path(xdg.path());
+    let proj_dir = std::fs::read_dir(vault.join("projects"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .next()
+        .unwrap()
+        .path();
+    let checkout = proj_dir.join(".checkout/dev");
+    std::fs::write(&checkout, b"# new comment\nA=1\n").unwrap();
+
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .args(["save", "-m", "comment"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("saved dev"));
+
+    // A second save with no further edit must still bail out — the freshly
+    // written blob equals the working copy byte-for-byte.
+    envroll_in(cwd.path(), xdg.path(), "p")
+        .arg("save")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("envroll: nothing to save"));
+}
+
+#[test]
 fn save_with_no_active_env_refuses() {
     let (cwd, xdg) = sandbox();
     init(cwd.path(), xdg.path(), "p");

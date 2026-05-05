@@ -63,35 +63,30 @@ pub fn run(args: Args, ctx: &Context) -> Result<(), EnvrollError> {
     }
 
     let working = read_working_copy(&prep)?;
-    let parsed = parser::parse_buf(&working)?; // ParseError → exit 12
-    let working_kv = parser::as_key_value_map(&parsed);
+    let _ = parser::parse_buf(&working)?; // validate only; ParseError → exit 12
 
-    // Compare against the env's current tip. If active_ref is set + --force,
-    // we deliberately rewind so we still write a new commit even if the new
-    // content matches the historical baseline.
-    let baseline_kv = {
+    // Compare raw bytes against the decrypted tip. The blob stores the
+    // working copy verbatim (write_env_blob below writes &working as-is),
+    // so byte equality is the right "no-op" predicate: comments, blank
+    // lines, key order, and trailing-newline differences all count as a
+    // real change and get persisted end-to-end.
+    let (cached_pass, baseline_plain) = {
         let blob_path = prep.env_blob_path(&prep.manifest.active);
         if blob_path.exists() {
             let pass_for_baseline = read_pass_and_verify(&prep, ctx)?;
             let baseline_bytes = std::fs::read(&blob_path).map_err(EnvrollError::Io)?;
-            let baseline_plain = crypto::decrypt(&baseline_bytes, &pass_for_baseline)?;
-            let baseline_parsed = parser::parse_buf(&baseline_plain)?;
-            // Stash for re-encryption later — but in the rewind case we want
-            // to write regardless of equality.
-            let kv = parser::as_key_value_map(&baseline_parsed);
-            (Some(pass_for_baseline), kv)
+            let plain = crypto::decrypt(&baseline_bytes, &pass_for_baseline)?;
+            (Some(pass_for_baseline), plain)
         } else {
             // First save on this env: every fork has already created the blob
             // so this branch should be unreachable under normal flow. Defend
             // against it by treating as "different" so we write.
-            (None, std::collections::BTreeMap::new())
+            (None, Vec::new())
         }
     };
 
-    let (cached_pass, baseline) = baseline_kv;
-
     let is_rewind = !prep.manifest.active_ref.is_empty();
-    if !is_rewind && parser::same_kv_set(&working_kv, &baseline) {
+    if !is_rewind && working == baseline_plain {
         eprintln!("envroll: nothing to save");
         return Ok(());
     }

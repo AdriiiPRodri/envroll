@@ -1,5 +1,4 @@
-//! `.env` file parsing and the canonical "nothing to save" comparator
-//!.
+//! `.env` file parsing utilities.
 //!
 //! envroll delegates the heavy lifting to `dotenvy`, but applies a thin
 //! tolerance pre-pass on read so it can ingest the unquoted multi-word
@@ -17,10 +16,13 @@
 //!   multi-word values so dotenvy stops rejecting them. Lines already inside
 //!   a multi-line quoted block are passed through untouched.
 //! - [`as_key_value_map`]: collapse to a `BTreeMap` with later-wins semantics.
-//!   This is the canonical "set" used by the comparator.
-//! - [`same_kv_set`]: comparator — order-insensitive,
-//!   value byte-exact, comments / blank lines / trailing-newline differences
-//!   ignored, inner-value whitespace IS significant.
+//!   Used by `status`, `diff`, `get`, `exec`, and friends to project a `.env`
+//!   into its canonical key-value set.
+//! - [`same_kv_set`]: order-insensitive equality on the `BTreeMap` view
+//!   (comments, blank lines, key order, trailing-newline differences are
+//!   ignored; inner-value whitespace IS significant). NOT used by `save` —
+//!   `save` compares raw bytes against the decrypted tip so cosmetic edits
+//!   (comments, key reordering) get persisted end-to-end.
 //! - [`serialize`]: re-emit a `.env` file. Pre-existing keys keep their
 //!   original ordering; new keys (from `updates`) append in insertion order.
 //!   Values are always emitted with double-quote wrapping and the four
@@ -277,14 +279,19 @@ pub fn as_key_value_map(parsed: &[(String, String)]) -> BTreeMap<String, String>
     map
 }
 
-/// Are these two parsed-and-collapsed key-value sets equivalent for the
-/// purpose of "nothing to save" detection?
+/// Order-insensitive equality on two parsed-and-collapsed key-value sets.
 ///
 /// This is equality on the [`BTreeMap`] view. Key order, comments, blank
 /// lines, and trailing-newline differences are already invisible at this
 /// layer (they were stripped in parsing). Inner-value whitespace differences
 /// ARE preserved as part of the value bytes, so a changed value with the
 /// same trim() still counts as a change.
+///
+/// `save` does NOT use this comparator — it compares raw bytes so that
+/// cosmetic edits (comment additions, key reordering, blank-line tweaks)
+/// produce a real commit instead of being silently dropped. Other call
+/// sites that genuinely care only about the KV projection are free to use
+/// this.
 pub fn same_kv_set(a: &BTreeMap<String, String>, b: &BTreeMap<String, String>) -> bool {
     a == b
 }
@@ -301,9 +308,11 @@ pub fn same_kv_set(a: &BTreeMap<String, String>, b: &BTreeMap<String, String>) -
 ///   and round-trips through [`parse_buf`] cleanly.
 ///
 /// This function does NOT preserve comments or blank lines from the original
-/// input — envroll commits the canonical key-value content, and comment-only
-/// edits classify as "nothing to save". Callers that want to preserve
-/// comments verbatim should use `envroll edit`.
+/// input. Callers that mutate values via the canonical-form pipeline (`set`,
+/// `rename-key`, `copy`) therefore drop comments by construction. Callers that
+/// want to preserve comments verbatim should use `envroll edit` (free-form
+/// editor invocation) or `envroll save` (which writes the working copy bytes
+/// as-is and persists comment-only changes too).
 pub fn serialize(parsed: &[(String, String)], updates: &[(String, String)]) -> String {
     let mut effective: BTreeMap<String, String> = as_key_value_map(parsed);
     for (k, v) in updates {
