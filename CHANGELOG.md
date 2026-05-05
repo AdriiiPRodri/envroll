@@ -8,6 +8,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 under each `## [VERSION]` heading becomes the GitHub release notes for
 that tag. Keep entries user-facing.
 
+## [0.3.2] - 2026-05-05
+
+### Fixed
+
+- **Release pipeline pins the Rust toolchain via `rust-toolchain.toml`.**
+  v0.3.1 declared `rust-version = "1.95.0"` but cargo-dist's Linux build
+  jobs run on `ubuntu-22.04` GHA runners, whose pre-installed Rust was
+  1.94.1 (and the aarch64 runner image was on 1.93.1). The MSRV check
+  failed and the GitHub Release for v0.3.1 was never published with
+  binaries (crates.io still has v0.3.1, but `curl ... | sh` couldn't
+  fetch a v0.3.1 release). v0.3.2 ships a top-level `rust-toolchain.toml`
+  so rustup auto-installs and selects 1.95.0 inside the runner regardless
+  of what's pre-baked. We deliberately stay on `ubuntu-22.04` to keep the
+  Linux binaries linked against an older glibc (Ubuntu 20.04 / Debian 11
+  / RHEL 8 still work). v0.3.1 has been yanked from crates.io.
+
 ## [0.3.1] - 2026-05-05
 
 ### Changed
@@ -261,6 +277,7 @@ no SaaS, no daemon.
   design.
 - macOS aarch64 binary (Linux + Windows added in 0.1.1).
 
+[0.3.2]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.3.2
 [0.3.1]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.3.1
 [0.3.0]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.3.0
 [0.2.2]: https://github.com/AdriiiPRodri/envroll/releases/tag/v0.2.2
